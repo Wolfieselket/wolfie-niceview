@@ -14,8 +14,10 @@ lv_obj_t *zmk_display_status_screen(void) {
 
     // Static trackball eye
     lv_obj_t *eye = lv_image_create(screen);
-    lv_image_set_src(eye, &wolfie_eye_center);
-    lv_obj_align(eye, LV_ALIGN_TOP_LEFT, 2, 16);
+
+lv_obj_set_style_image_recolor(eye, lv_color_white(), 0);
+lv_obj_set_style_image_recolor_opa(eye, LV_OPA_COVER, 0);
+
 
     // Temporary header
     lv_obj_t *label = lv_label_create(screen);
