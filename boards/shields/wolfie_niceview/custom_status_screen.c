@@ -13,10 +13,18 @@ lv_obj_t *zmk_display_status_screen(void) {
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
     // Static trackball eye
-    lv_obj_t *eye = lv_image_create(screen);
 
-lv_obj_set_style_image_recolor(eye, lv_color_white(), 0);
-lv_obj_set_style_image_recolor_opa(eye, LV_OPA_COVER, 0);
+    // Temporary test: white rectangle
+    lv_obj_t *eye_test = lv_obj_create(screen);
+
+    lv_obj_set_size(eye_test, 74, 46);
+    lv_obj_align(eye_test, LV_ALIGN_TOP_LEFT, 2, 16);
+
+    lv_obj_set_style_bg_color(eye_test, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(eye_test, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(eye_test, 0, 0);
+    lv_obj_set_style_radius(eye_test, 0, 0);
+    lv_obj_set_style_pad_all(eye_test, 0, 0);
 
 
     // Temporary header
