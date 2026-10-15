@@ -1,0 +1,9 @@
+
+file_format: "1"
+id: wolfie_niceview
+name: Wolfie nice!view
+type: shield
+requires:
+  - nice_view_header
+features:
+  - display
