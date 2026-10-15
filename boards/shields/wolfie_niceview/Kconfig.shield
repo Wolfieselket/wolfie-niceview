@@ -1,0 +1,3 @@
+
+config SHIELD_WOLFIE_NICEVIEW
+    def_bool $(shields_list_contains,wolfie_niceview)
