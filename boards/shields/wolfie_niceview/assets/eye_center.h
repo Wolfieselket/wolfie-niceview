@@ -46,7 +46,27 @@ static const uint8_t wolfie_eye_center_bits[EYE_BYTES_PER_ROW * EYE_HEIGHT] = {
     0x00, 0x00, 0x00, 0x00,
 };
 
+
+#include <lvgl.h>
+
 static inline int wolfie_eye_get_pixel(int x, int y) {
-    if (x < 0 || x >= EYE_WIDTH || y < 0 || y >= EYE_HEIGHT) return 0;
-    return (wolfie_eye_center_bits[y * EYE_BYTES_PER_ROW + x / 8] >> (7 - (x % 8))) & 1;
+    if (x < 0 || x >= EYE_WIDTH ||
+        y < 0 || y >= EYE_HEIGHT) {
+        return 0;
+    }
+
+    return (wolfie_eye_center_bits[
+        y * EYE_BYTES_PER_ROW + x / 8
+    ] >> (7 - (x % 8))) & 1;
 }
+
+/* LVGL image descriptor for the 74 x 46 eye */
+static const lv_image_dsc_t wolfie_eye_center = {
+    .header.magic = LV_IMAGE_HEADER_MAGIC,
+    .header.cf = LV_COLOR_FORMAT_A1,
+    .header.w = EYE_WIDTH,
+    .header.h = EYE_HEIGHT,
+    .header.stride = EYE_BYTES_PER_ROW,
+    .data_size = sizeof(wolfie_eye_center_bits),
+    .data = wolfie_eye_center_bits,
+};
