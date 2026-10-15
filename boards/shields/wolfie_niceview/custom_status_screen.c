@@ -3,8 +3,16 @@
 #include <zmk/display/status_screen.h>
 #include "assets/eye_center.h"
 
+
 lv_obj_t *zmk_display_status_screen(void) {
+    // Request 180-degree rotation
+    lv_display_set_rotation(
+        lv_display_get_default(),
+        LV_DISPLAY_ROTATION_180
+    );
+
     lv_obj_t *screen = lv_obj_create(NULL);
+
 
     // Screen background
     lv_obj_set_style_bg_color(screen, lv_color_white(), 0);
