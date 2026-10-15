@@ -14,11 +14,20 @@ lv_obj_t *zmk_display_status_screen(void) {
 
     // Static trackball eye
 
-    // Temporary test: white rectangle
-    lv_obj_t *eye_test = lv_obj_create(screen);
 
-    lv_obj_set_size(eye_test, 74, 46);
-    lv_obj_align(eye_test, LV_ALIGN_TOP_LEFT, 2, 16);
+    // Static trackball eye
+    lv_obj_t *eye = lv_image_create(screen);
+
+    // Load the eye bitmap
+    lv_image_set_src(eye, &wolfie_eye_center);
+
+    // Position at x=2, y=16
+    lv_obj_align(eye, LV_ALIGN_TOP_LEFT, 2, 16);
+
+    // Render image in white
+    lv_obj_set_style_image_recolor(eye, lv_color_white(), 0);
+    lv_obj_set_style_image_recolor_opa(eye, LV_OPA_COVER, 0);
+
 
     lv_obj_set_style_bg_color(eye_test, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(eye_test, LV_OPA_COVER, 0);
