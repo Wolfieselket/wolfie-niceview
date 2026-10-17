@@ -1,5 +1,5 @@
 /*
- * Wolfie nice!view — animation stage 1.
+ * Wolfie nice!view — animation stage 1 + battery percentage and USB power status.
  *
  * Preserve the two proven, small 1-bit sprite assets, the physical 180-degree
  * pre-rotation, and all display hardware configuration.
@@ -9,6 +9,12 @@
  * not pupil movement or trackball-reactive behaviour yet.
  */
 #include <lvgl.h>
+#include <zephyr/kernel.h>
+#include <zmk/battery.h>
+#if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
+#include <zmk/usb.h>
+#endif
+#include "assets/wolfie_battery_glyphs.h"
 #include <stdint.h>
 #include "assets/wolfie_eye_upright.h"
 #include "assets/wolfie_label_upright.h"
@@ -27,6 +33,77 @@ static const uint16_t eye_hold_ms[] = { 850, 1400, 850, 2500 };
 static lv_obj_t *animated_eye;
 static lv_timer_t *eye_motion_timer;
 static uint8_t animation_phase;
+
+/* Right-side battery display, physically upright thanks to pre-rotated A1 glyphs. */
+#define WOLFIE_BATTERY_X 119  /* physical display left edge of the 4-character reading */
+#define WOLFIE_BATTERY_Y 21
+#define WOLFIE_USB_X 128
+#define WOLFIE_USB_Y 37
+#define WOLFIE_LCD_HEIGHT 68
+
+static lv_obj_t *battery_glyph[4];
+static lv_obj_t *usb_glyph;
+static lv_timer_t *battery_refresh_timer;
+static int16_t previous_level = -1;
+static int8_t previous_usb = -1;
+
+/* Objects are positioned in logical LVGL coordinates. Hardware is mounted 180°.
+ * Thus we reflect the physical positions, while the image data is itself rotated.
+ * Never rotate the complete display with LVGL; that broke our earlier tests.
+ */
+static lv_obj_t *wolfie_make_glyph(lv_obj_t *screen, const lv_image_dsc_t *img,
+                                   int phys_x, int phys_y)
+{
+    lv_obj_t *obj = lv_image_create(screen);
+    lv_image_set_src(obj, img);
+    lv_obj_set_pos(obj, WOLFIE_LCD_WIDTH - phys_x - img->header.w,
+                   WOLFIE_LCD_HEIGHT - phys_y - img->header.h);
+    lv_obj_set_style_image_recolor(obj, lv_color_black(), 0);
+    lv_obj_set_style_image_recolor_opa(obj, LV_OPA_COVER, 0);
+    return obj;
+}
+
+static void wolfie_refresh_battery(void)
+{
+    /* ZMK's own battery reading is a voltage-based percentage estimate. */
+    uint8_t level = zmk_battery_state_of_charge();
+    if (level > 100U) { level = 100U; }
+
+    if (previous_level != (int16_t)level) {
+        const uint8_t values[3] = {level / 100U, (level / 10U) % 10U, level % 10U};
+        for (uint8_t i = 0; i < 3U; ++i) {
+            bool visible = (i == 2U) || (i == 1U && level >= 10U) ||
+                           (i == 0U && level == 100U);
+            if (visible) {
+                lv_image_set_src(battery_glyph[i], wolfie_digits[values[i]]);
+                lv_obj_remove_flag(battery_glyph[i], LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(battery_glyph[i], LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+        previous_level = level;
+    }
+
+    /* "USB" means external USB power is present, NOT confirmed charging. */
+    bool usb_present = false;
+#if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
+    usb_present = zmk_usb_is_powered();
+#endif
+    if (previous_usb != (int8_t)usb_present) {
+        if (usb_present) {
+            lv_obj_remove_flag(usb_glyph, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(usb_glyph, LV_OBJ_FLAG_HIDDEN);
+        }
+        previous_usb = (int8_t)usb_present;
+    }
+}
+
+static void wolfie_battery_timer_cb(lv_timer_t *timer)
+{
+    ARG_UNUSED(timer);
+    wolfie_refresh_battery();
+}
 
 static void wolfie_eye_timer_cb(lv_timer_t *timer)
 {
@@ -49,7 +126,13 @@ static void wolfie_status_screen_event_cb(lv_event_t *event)
             lv_timer_delete(eye_motion_timer);
             eye_motion_timer = NULL;
         }
+        if (battery_refresh_timer != NULL) {
+            lv_timer_delete(battery_refresh_timer);
+            battery_refresh_timer = NULL;
+        }
         animated_eye = NULL;
+        usb_glyph = NULL;
+        for (uint8_t i = 0; i < 4U; ++i) { battery_glyph[i] = NULL; }
     }
 }
 
@@ -82,6 +165,21 @@ lv_obj_t *zmk_display_status_screen(void)
     animation_phase = 0;
     lv_obj_add_event_cb(screen, wolfie_status_screen_event_cb, LV_EVENT_DELETE, NULL);
     eye_motion_timer = lv_timer_create(wolfie_eye_timer_cb, 1600, NULL);
+
+    /* 3 digits + percent, in physical reading order. Use hidden leading zeroes. */
+    for (uint8_t i = 0; i < 3U; ++i) {
+        battery_glyph[i] = wolfie_make_glyph(screen, &wolfie_digit_0_img,
+                                               WOLFIE_BATTERY_X + 7 * i,
+                                               WOLFIE_BATTERY_Y);
+    }
+    battery_glyph[3] = wolfie_make_glyph(screen, &wolfie_percent_img,
+                                          WOLFIE_BATTERY_X + 21, WOLFIE_BATTERY_Y);
+    usb_glyph = wolfie_make_glyph(screen, &wolfie_usb_img,
+                                   WOLFIE_USB_X, WOLFIE_USB_Y);
+    previous_level = -1;
+    previous_usb = -1;
+    wolfie_refresh_battery();
+    battery_refresh_timer = lv_timer_create(wolfie_battery_timer_cb, 15000, NULL);
 
     return screen;
 }
