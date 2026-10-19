@@ -1,4 +1,4 @@
-/* Wolfie LEFT battery glyphs: 5x7 font, pre-rotated 180 degrees for the physical nice!view. */
+/* Wolfie LEFT battery glyphs: 5x7 font, orientation corrected after hardware test. */
 /* A1 packed MSB-first, with an explicit LVGL 9.x stride as in the working eye assets. */
 #pragma once
 #include <stdint.h>
@@ -17,7 +17,7 @@ static const lv_image_dsc_t wolfie_digit_0_img = {
     .data = wolfie_digit_0_bits,
 };
 
-static const uint8_t wolfie_digit_1_bits[9] = { 0x00, 0x38, 0x10, 0x10, 0x10, 0x10, 0x18, 0x10, 0x00 };
+static const uint8_t wolfie_digit_1_bits[9] = { 0x00, 0x10, 0x30, 0x10, 0x10, 0x10, 0x10, 0x38, 0x00 };
 static const lv_image_dsc_t wolfie_digit_1_img = {
     .header.magic = LV_IMAGE_HEADER_MAGIC,
     .header.cf = LV_COLOR_FORMAT_A1,
@@ -28,7 +28,7 @@ static const lv_image_dsc_t wolfie_digit_1_img = {
     .data = wolfie_digit_1_bits,
 };
 
-static const uint8_t wolfie_digit_2_bits[9] = { 0x00, 0x7c, 0x08, 0x10, 0x20, 0x40, 0x44, 0x38, 0x00 };
+static const uint8_t wolfie_digit_2_bits[9] = { 0x00, 0x38, 0x44, 0x04, 0x08, 0x10, 0x20, 0x7c, 0x00 };
 static const lv_image_dsc_t wolfie_digit_2_img = {
     .header.magic = LV_IMAGE_HEADER_MAGIC,
     .header.cf = LV_COLOR_FORMAT_A1,
@@ -39,7 +39,7 @@ static const lv_image_dsc_t wolfie_digit_2_img = {
     .data = wolfie_digit_2_bits,
 };
 
-static const uint8_t wolfie_digit_3_bits[9] = { 0x00, 0x3c, 0x40, 0x40, 0x38, 0x40, 0x40, 0x3c, 0x00 };
+static const uint8_t wolfie_digit_3_bits[9] = { 0x00, 0x78, 0x04, 0x04, 0x38, 0x04, 0x04, 0x78, 0x00 };
 static const lv_image_dsc_t wolfie_digit_3_img = {
     .header.magic = LV_IMAGE_HEADER_MAGIC,
     .header.cf = LV_COLOR_FORMAT_A1,
@@ -50,7 +50,7 @@ static const lv_image_dsc_t wolfie_digit_3_img = {
     .data = wolfie_digit_3_bits,
 };
 
-static const uint8_t wolfie_digit_4_bits[9] = { 0x00, 0x20, 0x20, 0x7c, 0x24, 0x28, 0x30, 0x20, 0x00 };
+static const uint8_t wolfie_digit_4_bits[9] = { 0x00, 0x08, 0x18, 0x28, 0x48, 0x7c, 0x08, 0x08, 0x00 };
 static const lv_image_dsc_t wolfie_digit_4_img = {
     .header.magic = LV_IMAGE_HEADER_MAGIC,
     .header.cf = LV_COLOR_FORMAT_A1,
@@ -61,7 +61,7 @@ static const lv_image_dsc_t wolfie_digit_4_img = {
     .data = wolfie_digit_4_bits,
 };
 
-static const uint8_t wolfie_digit_5_bits[9] = { 0x00, 0x3c, 0x40, 0x40, 0x3c, 0x04, 0x04, 0x7c, 0x00 };
+static const uint8_t wolfie_digit_5_bits[9] = { 0x00, 0x7c, 0x40, 0x40, 0x78, 0x04, 0x04, 0x78, 0x00 };
 static const lv_image_dsc_t wolfie_digit_5_img = {
     .header.magic = LV_IMAGE_HEADER_MAGIC,
     .header.cf = LV_COLOR_FORMAT_A1,
@@ -72,7 +72,7 @@ static const lv_image_dsc_t wolfie_digit_5_img = {
     .data = wolfie_digit_5_bits,
 };
 
-static const uint8_t wolfie_digit_6_bits[9] = { 0x00, 0x38, 0x44, 0x44, 0x3c, 0x04, 0x08, 0x70, 0x00 };
+static const uint8_t wolfie_digit_6_bits[9] = { 0x00, 0x1c, 0x20, 0x40, 0x78, 0x44, 0x44, 0x38, 0x00 };
 static const lv_image_dsc_t wolfie_digit_6_img = {
     .header.magic = LV_IMAGE_HEADER_MAGIC,
     .header.cf = LV_COLOR_FORMAT_A1,
@@ -83,7 +83,7 @@ static const lv_image_dsc_t wolfie_digit_6_img = {
     .data = wolfie_digit_6_bits,
 };
 
-static const uint8_t wolfie_digit_7_bits[9] = { 0x00, 0x08, 0x08, 0x08, 0x10, 0x20, 0x40, 0x7c, 0x00 };
+static const uint8_t wolfie_digit_7_bits[9] = { 0x00, 0x7c, 0x04, 0x08, 0x10, 0x20, 0x20, 0x20, 0x00 };
 static const lv_image_dsc_t wolfie_digit_7_img = {
     .header.magic = LV_IMAGE_HEADER_MAGIC,
     .header.cf = LV_COLOR_FORMAT_A1,
@@ -105,7 +105,7 @@ static const lv_image_dsc_t wolfie_digit_8_img = {
     .data = wolfie_digit_8_bits,
 };
 
-static const uint8_t wolfie_digit_9_bits[9] = { 0x00, 0x1c, 0x20, 0x40, 0x78, 0x44, 0x44, 0x38, 0x00 };
+static const uint8_t wolfie_digit_9_bits[9] = { 0x00, 0x38, 0x44, 0x44, 0x3c, 0x04, 0x08, 0x70, 0x00 };
 static const lv_image_dsc_t wolfie_digit_9_img = {
     .header.magic = LV_IMAGE_HEADER_MAGIC,
     .header.cf = LV_COLOR_FORMAT_A1,
@@ -116,7 +116,7 @@ static const lv_image_dsc_t wolfie_digit_9_img = {
     .data = wolfie_digit_9_bits,
 };
 
-static const uint8_t wolfie_percent_bits[9] = { 0x00, 0x00, 0x64, 0x68, 0x10, 0x10, 0x2c, 0x4c, 0x00 };
+static const uint8_t wolfie_percent_bits[9] = { 0x00, 0x64, 0x68, 0x10, 0x10, 0x2c, 0x4c, 0x00, 0x00 };
 static const lv_image_dsc_t wolfie_percent_img = {
     .header.magic = LV_IMAGE_HEADER_MAGIC,
     .header.cf = LV_COLOR_FORMAT_A1,
