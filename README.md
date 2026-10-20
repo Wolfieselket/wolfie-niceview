@@ -1,32 +1,28 @@
-# Wolfie left battery display — orientation and placement fix
+# Wolfie display photo follow-up — focused two-file test
 
-This update corrects **both issues visible in the hardware photograph**:
-- The battery percentage appears upside-down.
-- The percentage appears at the bottom-right instead of the intended top-left.
+The hardware photographs show:
+- Right: BT profile, layer, battery and `WOLFIE R` text visible, **eye absent**.
+- Left: Space art, battery and `WOLFIE L` upright, **LINK glyph inverted**.
 
-Unlike previous attempts, the fix updates the **positions in `custom_status_screen.c`**
-*and* provides explicitly upright 7x9 1-bit number/percent sprites in
-`assets/wolfie_left_battery_glyphs.h`. These use the same unrotated coordinates
-as the successfully tested `WOLFIE L` space scene.
+## Changes
 
-All four approved space-scene tiles are unchanged. The LVGL black/white recolor
-remains compatible with the display's existing inversion setting.
+1. `boards/shields/wolfie_niceview/custom_status_screen.c`:
+   - Preserves the existing eye and status widgets and their positions.
+   - Moves the existing eye and `WOLFIE R` label to the foreground after constructing the new status widgets.
+   - Explicitly invalidates the eye region during its existing slow movement cycle.
+   - **This is a targeted diagnostic for the missing eye, not a proven root-cause fix.**
+2. `boards/shields/wolfie_leftview/assets/wolfie_left_status_glyphs.h`:
+   - Un-rotates the `LINK+` and `LINK-` image data so they follow the *same tested image orientation* as the working left battery numbers.
+   - Does not alter any other images or C functions.
 
 ## Installation
 
-1. Leave your `working-left-space-static` backup branch untouched.
-2. In GitHub Desktop, select `main` in **wolfie-niceview**.
-3. Extract this ZIP and copy `boards` into the local repository, merging folders.
-4. Confirm TWO files changed:
-   - `boards/shields/wolfie_leftview/custom_status_screen.c`
-   - `boards/shields/wolfie_leftview/assets/wolfie_left_battery_glyphs.h`
-5. Commit and push: `Correct left battery placement and orientation`.
-6. Run **Wolfie-Split-Trackball-ZMK** Actions on `main` and wait for a successful build.
-7. Download the **new** firmware artifact and flash only
-   `wolfie_split_left_display_test.uf2` onto the left controller.
+1. In GitHub Desktop open **wolfie-niceview**, branch `main`; leave the working display backup branches untouched.
+2. Extract this ZIP and merge its `boards` folder into the repository root.
+3. Confirm that **only the two files listed above** changed.
+4. Commit as `Correct left link glyphs and test right eye redraw`, then push.
+5. In **Wolfie-Split-Trackball-ZMK** run a fresh `main` workflow. Wait for both split display builds to succeed.
+6. Flash **only `wolfie_split_right_central.uf2`** to the right first and check the animated eye, BT, layer and battery. Keep a copy of your earlier successful UF2.
+7. If the right eye is restored and the keyboard/trackball work, flash **`wolfie_split_left_display_test.uf2`** to the left and check LINK orientation.
 
-No right-hand, keyboard, Bluetooth or PMW3610 firmware changes are included.
-The update still requires GitHub Actions compilation and hardware verification.
-
-If the battery text is still wrong, share a fresh photo of the screen AND
-confirm the build run time; older artifacts can contain earlier glyph versions.
+Do not flash the older `wolfie_split_left_peripheral` file: it lacks the left display. Do not reset Bluetooth settings or alter wiring. If the right eye is still missing, report that result before we modify further. The new code has been reviewed but has **not** been compiled in GitHub Actions or verified on hardware.

@@ -162,6 +162,9 @@ static void wolfie_eye_timer_cb(lv_timer_t *timer)
 
     uint8_t phase = animation_phase;
     lv_obj_set_x(animated_eye, WOLFIE_EYE_BASE_X + eye_x_offsets[phase]);
+    /* The image was missing after the new status sprites were introduced.
+     * Force an eye redraw without changing SPI, artwork, or animation speed. */
+    lv_obj_invalidate(animated_eye);
     lv_timer_set_period(timer, eye_hold_ms[phase]);
 
     animation_phase = (uint8_t)((phase + 1U) % 4U);
@@ -243,6 +246,13 @@ lv_obj_t *zmk_display_status_screen(void)
     wolfie_previous_layer = -1;
     wolfie_refresh_host_and_layer();
     wolfie_status_timer = lv_timer_create(wolfie_status_timer_cb, WOLFIE_STATUS_UPDATE_MS, NULL);
+
+    /* Re-assert the original eye and label as foreground objects after
+     * creating the newly added status sprites. The status badges occupy
+     * separate edge positions, so foreground order does not cover them. */
+    lv_obj_move_foreground(eye);
+    lv_obj_move_foreground(label);
+    lv_obj_invalidate(eye);
 
     return screen;
 }
