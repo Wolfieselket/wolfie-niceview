@@ -65,18 +65,32 @@ static int8_t wolfie_last_connected = -1;
 static int8_t wolfie_current_connected = 0;
 static uint8_t wolfie_bt_ticks = 0U;
 
+/* Read the actual active ZMK layer. The original code collapsed every nonzero
+ * layer into FUNCTION; these pre-rotated combined sprites cover layers 0..4.
+ * Unknown/new layers deliberately show LAYER rather than the wrong name.
+ */
 static const lv_image_dsc_t *wolfie_status_sprite(uint8_t layer, uint8_t connected)
 {
-    if (connected) {
-        return layer ? &wolfie_status_on_function_img : &wolfie_status_on_qwerty_img;
+    switch (layer) {
+    case 0:
+        return connected ? &wolfie_status_on_qwerty_img : &wolfie_status_off_qwerty_img;
+    case 1:
+        return connected ? &wolfie_status_on_symbols_img : &wolfie_status_off_symbols_img;
+    case 2:
+        return connected ? &wolfie_status_on_function_img : &wolfie_status_off_function_img;
+    case 3:
+        return connected ? &wolfie_status_on_mouse_img : &wolfie_status_off_mouse_img;
+    case 4:
+        return connected ? &wolfie_status_on_gaming_img : &wolfie_status_off_gaming_img;
+    default:
+        return connected ? &wolfie_status_on_layer_img : &wolfie_status_off_layer_img;
     }
-    return layer ? &wolfie_status_off_function_img : &wolfie_status_off_qwerty_img;
 }
 
 static void wolfie_refresh_layer_status(bool force_bluetooth)
 {
     if (wolfie_layer_status == NULL) { return; }
-    const int8_t layer = zmk_keymap_highest_layer_active() == 0 ? 0 : 1;
+    const uint8_t layer = zmk_keymap_highest_layer_active();
     if (force_bluetooth || (++wolfie_bt_ticks >= WOLFIE_BT_CHECK_EVERY_TICKS)) {
         wolfie_bt_ticks = 0U;
         wolfie_current_connected = zmk_ble_active_profile_is_connected() ? 1 : 0;
