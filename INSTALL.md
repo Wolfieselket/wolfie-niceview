@@ -1,31 +1,25 @@
-# Wolfie Right — fast layer status and compact Bluetooth indicator
+# Wolfie LEFT nice!view — upright LINK status only
 
-Built **directly from the hardware-tested `Wolfie-right-layer-only-diagnostic.zip`** (eye animation and layer status working).
+This is a LEFT-SIDE ONLY update. It does **not** contain any right display files.
+Do not change or reflash the tested, working right half.
 
-Changes:
+## Files
 
-- Layer name refresh: **1200 ms → 250 ms**. Actual key responsiveness is unchanged.
-- One new small `BT+` / `BT-` indicator on the right at the physical upper-left, above the layer label.
-- `BT+` means the active Bluetooth host profile is connected. `BT-` means it is not. This first conservative version **does not yet show the profile number or signal strength**.
-- BLE checks every **1000 ms** (one check per four layer timer callbacks); redraws only when state changes.
-- The eye animation, static WOLFIE R label, battery percentage/USB display, PMW3610, keymap, and left-display source are unchanged.
+- `boards/shields/wolfie_leftview/custom_status_screen.c`: Keeps the original working static space scene and local battery percentage; adds the split-connection label if it is missing from the current source.
+- `boards/shields/wolfie_leftview/assets/wolfie_left_status_glyphs.h`: Correct upright/unmirrored A1 glyph data for `LINK+` and `LINK-`, in the same convention as the **working** left battery digits.
+
+The previous upside-down LINK came from sprites that had been rotated 180 degrees before use. The corrected glyphs are already upright. The actual scene and battery sprites are unmodified.
 
 ## Install
 
-1. Keep your saved known-working UF2 files. Keep the backup branches unchanged.
-2. Open `wolfie-niceview` in GitHub Desktop on `main`.
-3. Extract this ZIP and copy the included `boards` folder into the repository root, merging folders and replacing files where prompted.
-4. Verify exactly **one modified** source file (`wolfie_niceview/custom_status_screen.c`) and **one new** header (`wolfie_niceview/assets/wolfie_bt_compact_glyphs.h`).
-5. Commit `Add compact BT indicator and faster layer display`, then Push origin.
-6. Run the workflow in `Wolfie-Split-Trackball-ZMK` on `main`, then download the freshly completed artifact.
-7. Flash **only** `wolfie_split_right_central.uf2` to the right half. No Bluetooth settings reset or left flash is necessary.
+1. Open `wolfie-niceview` in GitHub Desktop, on `main`. Keep your backup branches.
+2. Extract the ZIP, and merge the `boards` folder into your local `wolfie-niceview` repository.
+3. Confirm that **only the two LEFT files above** change. Some may show as unchanged if already committed. The right-half display files must not change.
+4. Commit changes as `Fix left LINK status orientation` and push.
+5. Run a **new** GitHub Actions build in `Wolfie-Split-Trackball-ZMK`. Make sure the workflow is using the latest `wolfie-niceview` version, not an old pinned revision.
+6. Download the **fresh** build artifact and flash only `wolfie_split_left_display_test.uf2` to the LEFT nice!nano.
+7. Confirm the space artwork, left battery percentage, and now-upright LINK status all display correctly.
 
-## Verify
+Important: If GitHub Desktop reports there are **no changes**, the corrected left code is already in `wolfie-niceview`. In that case there is nothing to commit: run a fresh firmware build and flash the new LEFT UF2. A repository change does not update hardware until you flash it.
 
-- Animated eye remains visible and moving.
-- Layer changes QWERTY → FUNCTION when held, returns on release; display latency should be at most roughly 250 ms plus screen update.
-- `BT+` appears when the right half is paired/connected to the computer; `BT-` when disconnected. Allow up to a second after a connection change.
-- Typing, trackball and split communication still function normally.
-
-This update is **not locally compiled**. GitHub Actions must complete successfully before flashing.
-If the eye disappears again, restore the last working right-side UF2. Do not clear Bluetooth pairings.
+Not yet compiled or verified on hardware. No wiring, Bluetooth pairing or keymap changes required.
