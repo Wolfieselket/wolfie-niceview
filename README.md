@@ -1,26 +1,24 @@
-# Wolfie right nice!view — eye isolation test
+# Wolfie right-side layer-only test
 
-## Why this build
+This is an incremental diagnostic based on the **last hardware-verified working right eye renderer**. It restores the working eye, motion timer, battery percentage, USB indicator and `WOLFIE R`, and adds only one layer-name widget (`QWERTY` / `FUNCTION`).
 
-The eye was confirmed working before the Bluetooth/layer status widgets were added. The first status update displayed the statuses but the eye vanished. A later foreground/invalidation patch did not restore it. This package restores the **exact previously successful eye + battery + USB renderer**, with no other firmware configuration changed, to isolate the problem.
+There is **no Bluetooth-status widget**, no new SPI configuration, no changes to the left display, no keymap changes and no split pairing reset.
 
-Changes:
-- **Modified:** `boards/shields/wolfie_niceview/custom_status_screen.c` only.
-- **Temporarily absent:** the recently added BT-profile and QWERTY/Function status widgets, so we can test the original eye renderer.
-- **Preserved:** original animated eye and `WOLFIE R`, right battery percentage/USB, left space artwork, left LINK state, wireless split, keymaps, trackball, and batteries.
+Included files:
 
-## Installation
+- `boards/shields/wolfie_niceview/custom_status_screen.c` — based on the confirmed working eye-and-battery renderer, plus only the layer status logic
+- `boards/shields/wolfie_niceview/assets/wolfie_layer_only_glyphs.h` — two small 34 × 9 monochrome sprites
 
-1. Open **wolfie-niceview** in GitHub Desktop on `main` (leave backup branches untouched).
-2. Extract this ZIP into the **root of wolfie-niceview**, merging the `boards` folder. Only `boards/shields/wolfie_niceview/custom_status_screen.c` should show as modified. The status-glyph header may remain in the repository; it is harmless and unused by this test.
-3. Commit `Diagnose missing right eye: restore working renderer` and push.
-4. In **Wolfie-Split-Trackball-ZMK**, rerun GitHub Actions on `main`, so it fetches the updated `wolfie-niceview` module. Avoid reflashing an older artifact.
-5. Download the **new** artifact from this new run, and flash ONLY `wolfie_split_right_central.uf2` on the **right** controller.
-6. Confirm whether the eye and battery percentage return while the trackball, both keyboards, and the left display still work.
+## Install
 
-No Bluetooth settings reset, wiring change or left firmware flash is required. Save the currently compiled UF2 before overwriting.
+1. Keep copies of the two last-known-working split UF2 files and preserve your backup branches.
+2. Open `wolfie-niceview` in GitHub Desktop on **main**.
+3. Extract this ZIP, copy its `boards` directory to the repository root, merging directories and replacing the existing `custom_status_screen.c`.
+4. Check that only the right `custom_status_screen.c` is modified and the new `wolfie_layer_only_glyphs.h` is added. Commit as `Test right layer status with animated eye` and push.
+5. Open `Wolfie-Split-Trackball-ZMK` → Actions → run the workflow on **main**. Wait for successful completion and download the artifact from this new run.
+6. Flash **only** `wolfie_split_right_central.uf2` to the right nice!nano. The left remains on its current firmware.
+7. Confirm the animated eye appears and moves; verify the battery reading, trackball and normal typing. Then hold and release the Function-layer thumb key and verify `QWERTY` → `FUNCTION` → `QWERTY`.
 
-### Interpretation
+If the eye disappears or unintended typing starts, disconnect and restore your saved last-known-working central UF2. Do not reset Bluetooth pairings; they are unrelated to this test.
 
-- **Eye returns:** the newly added right Bluetooth/layer status rendering causes the regression; we will reintroduce one status widget at a time and identify the specific interaction.
-- **Eye stays absent:** we need to check that the right UF2 was compiled from this revision / exact module commit or inspect your on-device display build; there is no reason to tweak the eye bitmap yet.
+**This patch has been structurally checked but has not been compiled or tested on hardware.**

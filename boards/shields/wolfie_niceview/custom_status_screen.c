@@ -11,6 +11,8 @@
 #include <lvgl.h>
 #include <zephyr/kernel.h>
 #include <zmk/battery.h>
+#include <zmk/keymap.h>
+#include "assets/wolfie_layer_only_glyphs.h"
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 #include <zmk/usb.h>
 #endif
@@ -46,6 +48,36 @@ static lv_obj_t *usb_glyph;
 static lv_timer_t *battery_refresh_timer;
 static int16_t previous_level = -1;
 static int8_t previous_usb = -1;
+
+/* Diagnostic: one layer-name widget, no Bluetooth host status yet. */
+#define WOLFIE_LAYER_X 3
+#define WOLFIE_LAYER_Y 21
+#define WOLFIE_LAYER_REFRESH_MS 1200
+static lv_obj_t *wolfie_layer_status;
+static lv_timer_t *wolfie_layer_timer;
+static int8_t wolfie_last_layer = -1;
+
+static void wolfie_refresh_layer(void)
+{
+    if (wolfie_layer_status == NULL) {
+        return;
+    }
+    /* 0 = QWERTY; other active layers are shown as FUNCTION for this test. */
+    const int8_t layer = (zmk_keymap_highest_layer_active() == 0) ? 0 : 1;
+    if (wolfie_last_layer != layer) {
+        lv_image_set_src(wolfie_layer_status,
+                         layer == 0 ? &wolfie_right_status_qwerty_img
+                                    : &wolfie_right_status_function_img);
+        wolfie_last_layer = layer;
+    }
+}
+
+static void wolfie_layer_timer_cb(lv_timer_t *timer)
+{
+    ARG_UNUSED(timer);
+    wolfie_refresh_layer();
+}
+
 
 /* Objects are positioned in logical LVGL coordinates. Hardware is mounted 180°.
  * Thus we reflect the physical positions, while the image data is itself rotated.
@@ -130,6 +162,11 @@ static void wolfie_status_screen_event_cb(lv_event_t *event)
             lv_timer_delete(battery_refresh_timer);
             battery_refresh_timer = NULL;
         }
+        if (wolfie_layer_timer != NULL) {
+            lv_timer_delete(wolfie_layer_timer);
+            wolfie_layer_timer = NULL;
+        }
+        wolfie_layer_status = NULL;
         animated_eye = NULL;
         usb_glyph = NULL;
         for (uint8_t i = 0; i < 4U; ++i) { battery_glyph[i] = NULL; }
@@ -180,6 +217,15 @@ lv_obj_t *zmk_display_status_screen(void)
     previous_usb = -1;
     wolfie_refresh_battery();
     battery_refresh_timer = lv_timer_create(wolfie_battery_timer_cb, 15000, NULL);
+
+    /* Add a single status glyph at the physical left edge, clear of the eye. */
+    wolfie_layer_status = wolfie_make_glyph(screen,
+                                          &wolfie_right_status_qwerty_img,
+                                          WOLFIE_LAYER_X, WOLFIE_LAYER_Y);
+    wolfie_last_layer = -1;
+    wolfie_refresh_layer();
+    wolfie_layer_timer = lv_timer_create(wolfie_layer_timer_cb,
+                                        WOLFIE_LAYER_REFRESH_MS, NULL);
 
     return screen;
 }
