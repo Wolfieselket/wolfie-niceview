@@ -13,8 +13,7 @@
 #include <zmk/battery.h>
 #include <zmk/keymap.h>
 #include <zmk/ble.h>
-#include "assets/wolfie_bt_compact_glyphs.h"
-#include "assets/wolfie_layer_only_glyphs.h"
+#include "assets/wolfie_combined_status_glyphs.h"
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 #include <zmk/usb.h>
 #endif
@@ -51,63 +50,49 @@ static lv_timer_t *battery_refresh_timer;
 static int16_t previous_level = -1;
 static int8_t previous_usb = -1;
 
-/* Diagnostic: one layer-name widget, no Bluetooth host status yet. */
-#define WOLFIE_LAYER_X 3
-#define WOLFIE_LAYER_Y 21
+/* One status object shared by layer + Bluetooth indicator.
+ * No extra LVGL widgets or timers beyond the hardware-tested layer version.
+ * Layer is polled at 250ms; active Bluetooth profile at 1000ms.
+ */
+#define WOLFIE_STATUS_X 3
+#define WOLFIE_STATUS_Y 5
 #define WOLFIE_LAYER_REFRESH_MS 250
+#define WOLFIE_BT_CHECK_EVERY_TICKS 4U
 static lv_obj_t *wolfie_layer_status;
 static lv_timer_t *wolfie_layer_timer;
 static int8_t wolfie_last_layer = -1;
-
-/* Compact active-host indicator: + connected, - disconnected.
- * First stage deliberately omits profile numbers to minimise display changes.
- * Reuse the existing layer timer; check BLE every 4 x 250 ms = 1 second.
- */
-#define WOLFIE_BT_X 3
-#define WOLFIE_BT_Y 5
-#define WOLFIE_BT_REFRESH_TICKS 4U
-static lv_obj_t *wolfie_bt_status;
 static int8_t wolfie_last_connected = -1;
-static uint8_t wolfie_bt_refresh_ticks;
+static int8_t wolfie_current_connected = 0;
+static uint8_t wolfie_bt_ticks = 0U;
 
-static void wolfie_refresh_bt(void)
+static const lv_image_dsc_t *wolfie_status_sprite(uint8_t layer, uint8_t connected)
 {
-    if (wolfie_bt_status == NULL) {
-        return;
+    if (connected) {
+        return layer ? &wolfie_status_on_function_img : &wolfie_status_on_qwerty_img;
     }
-    const int8_t connected = zmk_ble_active_profile_is_connected() ? 1 : 0;
-    if (connected != wolfie_last_connected) {
-        lv_image_set_src(wolfie_bt_status,
-                         connected ? &wolfie_bt_connected_img
-                                   : &wolfie_bt_disconnected_img);
-        wolfie_last_connected = connected;
-    }
+    return layer ? &wolfie_status_off_function_img : &wolfie_status_off_qwerty_img;
 }
 
-
-static void wolfie_refresh_layer(void)
+static void wolfie_refresh_layer_status(bool force_bluetooth)
 {
-    if (wolfie_layer_status == NULL) {
-        return;
+    if (wolfie_layer_status == NULL) { return; }
+    const int8_t layer = zmk_keymap_highest_layer_active() == 0 ? 0 : 1;
+    if (force_bluetooth || (++wolfie_bt_ticks >= WOLFIE_BT_CHECK_EVERY_TICKS)) {
+        wolfie_bt_ticks = 0U;
+        wolfie_current_connected = zmk_ble_active_profile_is_connected() ? 1 : 0;
     }
-    /* 0 = QWERTY; other active layers are shown as FUNCTION for this test. */
-    const int8_t layer = (zmk_keymap_highest_layer_active() == 0) ? 0 : 1;
-    if (wolfie_last_layer != layer) {
+    if (layer != wolfie_last_layer || wolfie_current_connected != wolfie_last_connected) {
         lv_image_set_src(wolfie_layer_status,
-                         layer == 0 ? &wolfie_right_status_qwerty_img
-                                    : &wolfie_right_status_function_img);
+                         wolfie_status_sprite(layer, wolfie_current_connected));
         wolfie_last_layer = layer;
+        wolfie_last_connected = wolfie_current_connected;
     }
 }
 
 static void wolfie_layer_timer_cb(lv_timer_t *timer)
 {
     ARG_UNUSED(timer);
-    wolfie_refresh_layer();
-    if (++wolfie_bt_refresh_ticks >= WOLFIE_BT_REFRESH_TICKS) {
-        wolfie_bt_refresh_ticks = 0U;
-        wolfie_refresh_bt();
-    }
+    wolfie_refresh_layer_status(false);
 }
 
 
@@ -199,7 +184,6 @@ static void wolfie_status_screen_event_cb(lv_event_t *event)
             wolfie_layer_timer = NULL;
         }
         wolfie_layer_status = NULL;
-        wolfie_bt_status = NULL;
         animated_eye = NULL;
         usb_glyph = NULL;
         for (uint8_t i = 0; i < 4U; ++i) { battery_glyph[i] = NULL; }
@@ -251,21 +235,18 @@ lv_obj_t *zmk_display_status_screen(void)
     wolfie_refresh_battery();
     battery_refresh_timer = lv_timer_create(wolfie_battery_timer_cb, 15000, NULL);
 
-    /* Add a single status glyph at the physical left edge, clear of the eye. */
+    /* Replace the old layer-only sprite with one combined status image.
+     * It occupies the same leftmost region and never overlaps the eye. */
     wolfie_layer_status = wolfie_make_glyph(screen,
-                                          &wolfie_right_status_qwerty_img,
-                                          WOLFIE_LAYER_X, WOLFIE_LAYER_Y);
+                                           &wolfie_status_off_qwerty_img,
+                                           WOLFIE_STATUS_X, WOLFIE_STATUS_Y);
     wolfie_last_layer = -1;
-    wolfie_refresh_layer();
+    wolfie_last_connected = -1;
+    wolfie_current_connected = 0;
+    wolfie_bt_ticks = 0U;
+    wolfie_refresh_layer_status(true);
     wolfie_layer_timer = lv_timer_create(wolfie_layer_timer_cb,
                                         WOLFIE_LAYER_REFRESH_MS, NULL);
-
-    /* Create the single compact Bluetooth widget after the proven eye setup. */
-    wolfie_bt_status = wolfie_make_glyph(screen, &wolfie_bt_disconnected_img,
-                                        WOLFIE_BT_X, WOLFIE_BT_Y);
-    wolfie_last_connected = -1;
-    wolfie_bt_refresh_ticks = 0U;
-    wolfie_refresh_bt();
 
     return screen;
 }
