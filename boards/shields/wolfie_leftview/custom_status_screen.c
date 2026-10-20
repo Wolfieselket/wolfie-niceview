@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include <zephyr/kernel.h>
 #include <zmk/battery.h>
+#include <zmk/split/bluetooth/peripheral.h>
+#include "assets/wolfie_left_status_glyphs.h"
 #include "assets/wolfie_left_battery_glyphs.h"
 #include "assets/wolfie_space_tiles.h"
 
@@ -44,6 +46,28 @@ static void add_white_scene_tile(lv_obj_t *screen, const lv_image_dsc_t *src,
 static lv_obj_t *wolfie_left_battery_digits[4];
 static lv_timer_t *wolfie_left_battery_timer;
 static int16_t wolfie_left_last_charge = -1;
+/* Accurate BLE link status from this peripheral to the right central. */
+#define WOLFIE_LINK_X 127
+#define WOLFIE_LINK_Y 2
+#define WOLFIE_LINK_POLL_MS 1500
+static lv_obj_t *wolfie_left_link_status;
+static lv_timer_t *wolfie_left_link_timer;
+static int8_t wolfie_left_last_link = -1;
+static void wolfie_left_refresh_link(void)
+{
+    int8_t connected = zmk_split_bt_peripheral_is_connected() ? 1 : 0;
+    if (wolfie_left_last_link != connected) {
+        lv_image_set_src(wolfie_left_link_status,
+                         connected ? &wolfie_left_status_link_up_img
+                                   : &wolfie_left_status_link_down_img);
+        wolfie_left_last_link = connected;
+    }
+}
+static void wolfie_left_link_timer_cb(lv_timer_t *timer)
+{
+    ARG_UNUSED(timer);
+    wolfie_left_refresh_link();
+}
 
 static lv_obj_t *wolfie_left_create_digit(lv_obj_t *screen,
                                            const lv_image_dsc_t *image,
@@ -101,6 +125,12 @@ static void wolfie_left_screen_delete_cb(lv_event_t *event)
         lv_timer_delete(wolfie_left_battery_timer);
         wolfie_left_battery_timer = NULL;
     }
+    if (wolfie_left_link_timer != NULL) {
+        lv_timer_delete(wolfie_left_link_timer);
+        wolfie_left_link_timer = NULL;
+    }
+    wolfie_left_link_status = NULL;
+    wolfie_left_last_link = -1;
     for (uint8_t i = 0; i < 4U; ++i) {
         wolfie_left_battery_digits[i] = NULL;
     }
@@ -153,5 +183,21 @@ lv_obj_t *zmk_display_status_screen(void)
     add_white_scene_tile(screen, &wolfie_space_tile_2, 0, 34);
     add_white_scene_tile(screen, &wolfie_space_tile_3, 80, 34);
     wolfie_left_add_battery_status(screen);
+    /* Small monochrome masking rectangle keeps the starfield behind LINK legible.
+     * The left screen's known-good inversion means white here appears black. */
+    lv_obj_t *link_backing = lv_obj_create(screen);
+    lv_obj_set_size(link_backing, 31, 11);
+    lv_obj_set_pos(link_backing, WOLFIE_LINK_X, WOLFIE_LINK_Y);
+    lv_obj_set_style_bg_color(link_backing, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(link_backing, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(link_backing, 0, 0);
+    lv_obj_set_style_pad_all(link_backing, 0, 0);
+    lv_obj_set_style_radius(link_backing, 0, 0);
+    lv_obj_remove_flag(link_backing, LV_OBJ_FLAG_SCROLLABLE);
+    wolfie_left_link_status = wolfie_left_create_digit(
+        screen, &wolfie_left_status_link_down_img, WOLFIE_LINK_X, WOLFIE_LINK_Y + 1);
+    wolfie_left_last_link = -1;
+    wolfie_left_refresh_link();
+    wolfie_left_link_timer = lv_timer_create(wolfie_left_link_timer_cb, WOLFIE_LINK_POLL_MS, NULL);
     return screen;
 }

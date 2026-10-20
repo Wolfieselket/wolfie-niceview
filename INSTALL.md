@@ -1,19 +1,33 @@
-# Wolfie left nice!view: black-background / white-artwork update
+# Wolfie status overlays: BLE host, active layer, peripheral link
 
-This update keeps the same approved left space scene, but **inverts the tile data** so the actual nice!view should render with a **black background** and **white planet, stars, station and `WOLFIE L` text**.
+Install ONLY to **wolfie-niceview** (display module repository), on branch `main`.
+Keep `working-both-displays-battery` intact. This is not a replacement for any keyboard GPIO or build files.
 
-Included files:
+## Files updated
 
-- `boards/shields/wolfie_leftview/assets/wolfie_space_tiles.h` (replaced)
-- `boards/shields/wolfie_leftview/custom_status_screen.c` (included unchanged for completeness)
+- `boards/shields/wolfie_niceview/custom_status_screen.c`
+- `boards/shields/wolfie_niceview/assets/wolfie_right_status_glyphs.h` (new)
+- `boards/shields/wolfie_leftview/custom_status_screen.c`
+- `boards/shields/wolfie_leftview/assets/wolfie_left_status_glyphs.h` (new)
 
-## Installing
+## Changes
 
-1. Keep your current working UF2 backups.
-2. Open **wolfie-niceview** in GitHub Desktop on `main`.
-3. Extract this ZIP and copy its `boards` folder into the repository root, merging folders.
-4. Confirm only the two files above changed. Commit as `Invert left space display to black background` and push.
-5. In **Wolfie-Split-Trackball-ZMK**, run the GitHub Actions workflow on `main` so it fetches the updated module.
-6. After the build succeeds, flash **only** `wolfie_split_left_display_test.uf2` to the left nice!nano.
+Right central: BT1+ / BT1- (active host profile, connected/disconnected; profiles BT1..BT5), plus QWERTY or FUNCTION (not an RSSI signal meter). The eye animation, right battery gauge, USB and label are preserved.
 
-This is a visual-only left-display change. The right eye, trackball, keymaps and wireless split configuration are unchanged.
+Left peripheral: LINK+ / LINK- (BLE connection to the central). Static space art and battery percentage are preserved.
+
+The status text uses the same pre-rotated 1-bit glyph convention as the working battery percentage sprites. Only changes the displayed bitmap when status changes (polled around 1 to 1.5 seconds). No physical wiring, keymap or split configuration changes.
+
+## Steps
+
+1. Extract and copy `boards/` to your local `wolfie-niceview` repository, merging the two shield subfolders.
+2. Review four file changes in GitHub Desktop; commit as `Add Bluetooth, split-link and layer status to displays` then push.
+3. Run a **fresh** workflow in `Wolfie-Split-Trackball-ZMK` on branch `main` so it fetches the module update.
+4. Build must succeed before flashing; this patch has not been ZMK-compiled here.
+5. Flash `wolfie_split_right_central.uf2` on the right, and verify BT host status and FUNCTION on the right. The right firmware was changed only in its display code.
+6. If stable, flash `wolfie_split_left_display_test.uf2` on the left and verify LINK+, keyboard, right trackball and battery.
+7. If failures occur, restore both archived previous split UF2 files without resetting Bluetooth bonds; the backup branches are untouched.
+
+Expected: On the right, BT1+ for host profile 1 connected; BT1- when disconnected, and QWERTY -> FUNCTION while the momentary layer is held. On the left, LINK+ when joined to right central, LINK- if disconnected. No RSSI bars are implied.
+
+Small pre-rotated status text has not yet been checked on hardware. If it is upside down, do not change SPI/device-tree settings; only the new status bitmap assets require adjustment.
