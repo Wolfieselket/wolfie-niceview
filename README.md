@@ -1,23 +1,32 @@
-# Wolfie left nice!view - physical battery text orientation fix
+# Wolfie left battery display — orientation and placement fix
 
-The previous battery glyph update accidentally made the numbers upright in LVGL screen coordinates, but the **left nice!view is mounted 180 degrees away from those coordinates**. This caused the battery digits to appear upside down even after the previous update.
+This update corrects **both issues visible in the hardware photograph**:
+- The battery percentage appears upside-down.
+- The percentage appears at the bottom-right instead of the intended top-left.
 
-This patch pre-rotates all ten digits and the percent symbol in the actual 7 x 9 bitmap data. It does not change the positions, percentage calculation, static space art, display driver, wireless split, or keyboard/trackball firmware.
+Unlike previous attempts, the fix updates the **positions in `custom_status_screen.c`**
+*and* provides explicitly upright 7x9 1-bit number/percent sprites in
+`assets/wolfie_left_battery_glyphs.h`. These use the same unrotated coordinates
+as the successfully tested `WOLFIE L` space scene.
 
-Only one firmware source file is included:
+All four approved space-scene tiles are unchanged. The LVGL black/white recolor
+remains compatible with the display's existing inversion setting.
 
-`boards/shields/wolfie_leftview/assets/wolfie_left_battery_glyphs.h`
+## Installation
 
-## Apply using GitHub Desktop
+1. Leave your `working-left-space-static` backup branch untouched.
+2. In GitHub Desktop, select `main` in **wolfie-niceview**.
+3. Extract this ZIP and copy `boards` into the local repository, merging folders.
+4. Confirm TWO files changed:
+   - `boards/shields/wolfie_leftview/custom_status_screen.c`
+   - `boards/shields/wolfie_leftview/assets/wolfie_left_battery_glyphs.h`
+5. Commit and push: `Correct left battery placement and orientation`.
+6. Run **Wolfie-Split-Trackball-ZMK** Actions on `main` and wait for a successful build.
+7. Download the **new** firmware artifact and flash only
+   `wolfie_split_left_display_test.uf2` onto the left controller.
 
-1. Open **wolfie-niceview** on `main` (leave `working-left-space-static` untouched).
-2. Extract the ZIP and copy its `boards` folder into the repository, replacing the existing matching file.
-3. In GitHub Desktop, confirm **only one header file** changed.
-4. Commit with a message like `Pre-rotate left battery digits for mounted display` and **Push origin**.
-5. In **Wolfie-Split-Trackball-ZMK**, manually run GitHub Actions workflow on `main` **after the module commit was pushed**.
-6. Wait for all jobs to complete successfully. Download the artifact from **this newly completed run**, not a previously downloaded `firmware (N)` folder.
-7. Flash **only** `wolfie_split_left_display_test.uf2` to the left nice!nano. Leave the right firmware and Bluetooth pairings unchanged.
+No right-hand, keyboard, Bluetooth or PMW3610 firmware changes are included.
+The update still requires GitHub Actions compilation and hardware verification.
 
-**Validation:** after flashing, check whether a 1, 2, 3, 4, 5, 6, 7 or 9 reads upright; 0 and 8 look similar when rotated. If the digits are still upside down after this new build, send a photograph of the left screen showing the percentage and the GitHub Actions run number; we will verify which version was built and whether its asset is actually being used.
-
-Rollback: flash your saved known-working left split display UF2 and/or return to the backup display-module commit.
+If the battery text is still wrong, share a fresh photo of the screen AND
+confirm the build run time; older artifacts can contain earlier glyph versions.

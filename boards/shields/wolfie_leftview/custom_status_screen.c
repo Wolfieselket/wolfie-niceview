@@ -1,7 +1,7 @@
 /*
  * Static Wolfie L 160x68 space scene, preserving the existing split and SPI.
  * Uses the user's chosen source image, with a readable WOLFIE L label.
- * No timers or changes to input devices or firmware roles.
+ * Only local battery-status timer; no changes to input devices or roles.
  */
 #include <lvgl.h>
 #include <stdint.h>
@@ -26,10 +26,10 @@ static void add_white_scene_tile(lv_obj_t *screen, const lv_image_dsc_t *src,
 /* Local battery reporting on the left ZMK BLE peripheral (not the right half's
  * percentage). No split BLE settings or keyboard scan configuration changed.
  *
- * The physical nice!view is mounted 180 degrees from LVGL coordinates,
- * and the proven left display also uses CONFIG_ZMK_DISPLAY_INVERT=y.
- * Therefore the physical black battery backing is LVGL white, while the
- * physical white battery digits are recolored LVGL black.
+ * The static scene bitmaps are already oriented correctly on the actual
+ * display. Battery sprites must use those SAME coordinates, without the
+ * extra 180-degree position flip. CONFIG_ZMK_DISPLAY_INVERT=y means the
+ * LVGL white backing appears black, and black-recolored digits appear white.
  */
 #define WOLFIE_DISPLAY_W 160
 #define WOLFIE_DISPLAY_H 68
@@ -51,9 +51,9 @@ static lv_obj_t *wolfie_left_create_digit(lv_obj_t *screen,
 {
     lv_obj_t *obj = lv_image_create(screen);
     lv_image_set_src(obj, image);
-    lv_obj_set_pos(obj,
-                   WOLFIE_DISPLAY_W - physical_x - (int)image->header.w,
-                   WOLFIE_DISPLAY_H - physical_y - (int)image->header.h);
+    /* Scene sprites and display coordinates are already upright.
+     * Do not mirror the battery digits independently. */
+    lv_obj_set_pos(obj, physical_x, physical_y);
     lv_obj_set_style_image_recolor(obj, lv_color_black(), 0);
     lv_obj_set_style_image_recolor_opa(obj, LV_OPA_COVER, 0);
     return obj;
@@ -112,9 +112,7 @@ static void wolfie_left_add_battery_status(lv_obj_t *screen)
     /* The small backing masks a few stars so battery digits stay readable. */
     lv_obj_t *backing = lv_obj_create(screen);
     lv_obj_set_size(backing, WOLFIE_BATT_BOX_W, WOLFIE_BATT_BOX_H);
-    lv_obj_set_pos(backing,
-                   WOLFIE_DISPLAY_W - WOLFIE_BATT_BOX_X - WOLFIE_BATT_BOX_W,
-                   WOLFIE_DISPLAY_H - WOLFIE_BATT_BOX_Y - WOLFIE_BATT_BOX_H);
+    lv_obj_set_pos(backing, WOLFIE_BATT_BOX_X, WOLFIE_BATT_BOX_Y);
     lv_obj_set_style_bg_color(backing, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(backing, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(backing, 0, 0);
