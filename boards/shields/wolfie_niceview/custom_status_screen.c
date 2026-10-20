@@ -11,9 +11,6 @@
 #include <lvgl.h>
 #include <zephyr/kernel.h>
 #include <zmk/battery.h>
-#include <zmk/ble.h>
-#include <zmk/keymap.h>
-#include "assets/wolfie_right_status_glyphs.h"
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 #include <zmk/usb.h>
 #endif
@@ -49,52 +46,6 @@ static lv_obj_t *usb_glyph;
 static lv_timer_t *battery_refresh_timer;
 static int16_t previous_level = -1;
 static int8_t previous_usb = -1;
-/* Compact status widgets at the physical left edge, clear of the animated eye. */
-#define WOLFIE_BT_X 3
-#define WOLFIE_BT_Y 5
-#define WOLFIE_LAYER_X 3
-#define WOLFIE_LAYER_Y 21
-#define WOLFIE_STATUS_UPDATE_MS 1200
-static lv_obj_t *wolfie_host_status;
-static lv_obj_t *wolfie_layer_status;
-static lv_timer_t *wolfie_status_timer;
-static int8_t wolfie_previous_host_code = -1;
-static int8_t wolfie_previous_layer = -1;
-static const lv_image_dsc_t *const wolfie_host_images[5][2] = {
-    {&wolfie_right_status_bt1_down_img, &wolfie_right_status_bt1_up_img},
-    {&wolfie_right_status_bt2_down_img, &wolfie_right_status_bt2_up_img},
-    {&wolfie_right_status_bt3_down_img, &wolfie_right_status_bt3_up_img},
-    {&wolfie_right_status_bt4_down_img, &wolfie_right_status_bt4_up_img},
-    {&wolfie_right_status_bt5_down_img, &wolfie_right_status_bt5_up_img},
-};
-
-static void wolfie_refresh_host_and_layer(void)
-{
-    /* + means a live Bluetooth host connection on the selected profile;
-     * - means not connected. Neither is an RSSI measurement. */
-    int profile = zmk_ble_active_profile_index();
-    if (profile < 0 || profile >= 5) { profile = 0; }
-    const int8_t connected = zmk_ble_active_profile_is_connected() ? 1 : 0;
-    const int8_t host_code = (int8_t)(profile * 2 + connected);
-    if (wolfie_previous_host_code != host_code) {
-        lv_image_set_src(wolfie_host_status, wolfie_host_images[profile][connected]);
-        wolfie_previous_host_code = host_code;
-    }
-    /* There are two user keymap layers: 0=QWERTY, 1=Function. */
-    const int8_t layer = (zmk_keymap_highest_layer_active() == 0) ? 0 : 1;
-    if (wolfie_previous_layer != layer) {
-        lv_image_set_src(wolfie_layer_status,
-                         (layer == 0) ? &wolfie_right_status_qwerty_img
-                                      : &wolfie_right_status_function_img);
-        wolfie_previous_layer = layer;
-    }
-}
-
-static void wolfie_status_timer_cb(lv_timer_t *timer)
-{
-    ARG_UNUSED(timer);
-    wolfie_refresh_host_and_layer();
-}
 
 /* Objects are positioned in logical LVGL coordinates. Hardware is mounted 180°.
  * Thus we reflect the physical positions, while the image data is itself rotated.
@@ -162,9 +113,6 @@ static void wolfie_eye_timer_cb(lv_timer_t *timer)
 
     uint8_t phase = animation_phase;
     lv_obj_set_x(animated_eye, WOLFIE_EYE_BASE_X + eye_x_offsets[phase]);
-    /* The image was missing after the new status sprites were introduced.
-     * Force an eye redraw without changing SPI, artwork, or animation speed. */
-    lv_obj_invalidate(animated_eye);
     lv_timer_set_period(timer, eye_hold_ms[phase]);
 
     animation_phase = (uint8_t)((phase + 1U) % 4U);
@@ -182,12 +130,6 @@ static void wolfie_status_screen_event_cb(lv_event_t *event)
             lv_timer_delete(battery_refresh_timer);
             battery_refresh_timer = NULL;
         }
-        if (wolfie_status_timer != NULL) {
-            lv_timer_delete(wolfie_status_timer);
-            wolfie_status_timer = NULL;
-        }
-        wolfie_host_status = NULL;
-        wolfie_layer_status = NULL;
         animated_eye = NULL;
         usb_glyph = NULL;
         for (uint8_t i = 0; i < 4U; ++i) { battery_glyph[i] = NULL; }
@@ -238,21 +180,6 @@ lv_obj_t *zmk_display_status_screen(void)
     previous_usb = -1;
     wolfie_refresh_battery();
     battery_refresh_timer = lv_timer_create(wolfie_battery_timer_cb, 15000, NULL);
-    wolfie_host_status = wolfie_make_glyph(screen, &wolfie_right_status_bt1_down_img,
-                                           WOLFIE_BT_X, WOLFIE_BT_Y);
-    wolfie_layer_status = wolfie_make_glyph(screen, &wolfie_right_status_qwerty_img,
-                                            WOLFIE_LAYER_X, WOLFIE_LAYER_Y);
-    wolfie_previous_host_code = -1;
-    wolfie_previous_layer = -1;
-    wolfie_refresh_host_and_layer();
-    wolfie_status_timer = lv_timer_create(wolfie_status_timer_cb, WOLFIE_STATUS_UPDATE_MS, NULL);
-
-    /* Re-assert the original eye and label as foreground objects after
-     * creating the newly added status sprites. The status badges occupy
-     * separate edge positions, so foreground order does not cover them. */
-    lv_obj_move_foreground(eye);
-    lv_obj_move_foreground(label);
-    lv_obj_invalidate(eye);
 
     return screen;
 }

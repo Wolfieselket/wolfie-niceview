@@ -1,28 +1,26 @@
-# Wolfie display photo follow-up — focused two-file test
+# Wolfie right nice!view — eye isolation test
 
-The hardware photographs show:
-- Right: BT profile, layer, battery and `WOLFIE R` text visible, **eye absent**.
-- Left: Space art, battery and `WOLFIE L` upright, **LINK glyph inverted**.
+## Why this build
 
-## Changes
+The eye was confirmed working before the Bluetooth/layer status widgets were added. The first status update displayed the statuses but the eye vanished. A later foreground/invalidation patch did not restore it. This package restores the **exact previously successful eye + battery + USB renderer**, with no other firmware configuration changed, to isolate the problem.
 
-1. `boards/shields/wolfie_niceview/custom_status_screen.c`:
-   - Preserves the existing eye and status widgets and their positions.
-   - Moves the existing eye and `WOLFIE R` label to the foreground after constructing the new status widgets.
-   - Explicitly invalidates the eye region during its existing slow movement cycle.
-   - **This is a targeted diagnostic for the missing eye, not a proven root-cause fix.**
-2. `boards/shields/wolfie_leftview/assets/wolfie_left_status_glyphs.h`:
-   - Un-rotates the `LINK+` and `LINK-` image data so they follow the *same tested image orientation* as the working left battery numbers.
-   - Does not alter any other images or C functions.
+Changes:
+- **Modified:** `boards/shields/wolfie_niceview/custom_status_screen.c` only.
+- **Temporarily absent:** the recently added BT-profile and QWERTY/Function status widgets, so we can test the original eye renderer.
+- **Preserved:** original animated eye and `WOLFIE R`, right battery percentage/USB, left space artwork, left LINK state, wireless split, keymaps, trackball, and batteries.
 
 ## Installation
 
-1. In GitHub Desktop open **wolfie-niceview**, branch `main`; leave the working display backup branches untouched.
-2. Extract this ZIP and merge its `boards` folder into the repository root.
-3. Confirm that **only the two files listed above** changed.
-4. Commit as `Correct left link glyphs and test right eye redraw`, then push.
-5. In **Wolfie-Split-Trackball-ZMK** run a fresh `main` workflow. Wait for both split display builds to succeed.
-6. Flash **only `wolfie_split_right_central.uf2`** to the right first and check the animated eye, BT, layer and battery. Keep a copy of your earlier successful UF2.
-7. If the right eye is restored and the keyboard/trackball work, flash **`wolfie_split_left_display_test.uf2`** to the left and check LINK orientation.
+1. Open **wolfie-niceview** in GitHub Desktop on `main` (leave backup branches untouched).
+2. Extract this ZIP into the **root of wolfie-niceview**, merging the `boards` folder. Only `boards/shields/wolfie_niceview/custom_status_screen.c` should show as modified. The status-glyph header may remain in the repository; it is harmless and unused by this test.
+3. Commit `Diagnose missing right eye: restore working renderer` and push.
+4. In **Wolfie-Split-Trackball-ZMK**, rerun GitHub Actions on `main`, so it fetches the updated `wolfie-niceview` module. Avoid reflashing an older artifact.
+5. Download the **new** artifact from this new run, and flash ONLY `wolfie_split_right_central.uf2` on the **right** controller.
+6. Confirm whether the eye and battery percentage return while the trackball, both keyboards, and the left display still work.
 
-Do not flash the older `wolfie_split_left_peripheral` file: it lacks the left display. Do not reset Bluetooth settings or alter wiring. If the right eye is still missing, report that result before we modify further. The new code has been reviewed but has **not** been compiled in GitHub Actions or verified on hardware.
+No Bluetooth settings reset, wiring change or left firmware flash is required. Save the currently compiled UF2 before overwriting.
+
+### Interpretation
+
+- **Eye returns:** the newly added right Bluetooth/layer status rendering causes the regression; we will reintroduce one status widget at a time and identify the specific interaction.
+- **Eye stays absent:** we need to check that the right UF2 was compiled from this revision / exact module commit or inspect your on-device display build; there is no reason to tweak the eye bitmap yet.
