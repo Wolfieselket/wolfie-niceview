@@ -1,85 +1,65 @@
---- uploaded-current/custom_status_screen.c
-+++ patched/custom_status_screen.c
-@@ -10,6 +10,9 @@
-  */
- #include <lvgl.h>
- #include <zephyr/kernel.h>
-+#include <zephyr/device.h>
-+#include <zephyr/devicetree.h>
-+#include <zephyr/drivers/sensor.h>
+--- before/custom_status_screen.c
++++ after/custom_status_screen.c
+@@ -16,6 +16,7 @@
  #include <zmk/battery.h>
  #include <zmk/keymap.h>
  #include <zmk/ble.h>
-@@ -103,10 +106,64 @@
-     }
- }
++#include <zmk/activity.h>
+ #include "assets/wolfie_combined_status_glyphs.h"
+ #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
+ #include <zmk/usb.h>
+@@ -39,6 +40,8 @@
+ static lv_obj_t *animated_eye;
+ static lv_timer_t *eye_motion_timer;
+ static uint8_t animation_phase;
++/* Pause only eye movement in normal idle; leave its last frame visible. */
++static bool eye_paused_for_idle = false;
  
-+/*
-+ * Trackball sensitivity by ZMK host profile (zero-based indices):
-+ *   BT1 => 400 CPI (near MX Ergo's 380 CPI default)
-+ *   BT0, BT2, BT3, BT4 => 1000 CPI
-+ *
-+ * Only run on a board which has Wolfie's PMW3610. In particular the
-+ * stand-alone nice!view build does not have a trackball device.
-+ *
-+ * This fork's src/pmw3610.h defines PMW3610_ALT_ATTR_CPI as its first
-+ * enum entry (value 0). The enum is in a private driver header, which
-+ * isn't exported to external display shield sources. Use its verified
-+ * numeric value via Zephyr's public sensor_attr_set() interface.
-+ *
-+ * Sensor init is asynchronous (including Wolfie's +1000 ms startup delay).
-+ * An -EBUSY result is expected during boot; retry on the next existing
-+ * 250 ms status timer tick. Only reprogram when the target CPI changes.
+ /* Right-side battery display, physically upright thanks to pre-rotated A1 glyphs. */
+ #define WOLFIE_BATTERY_X 119  /* physical display left edge of the 4-character reading */
+@@ -159,9 +162,29 @@
+ static void wolfie_update_profile_cpi(void) { }
+ #endif
+ 
++/* The existing 250 ms status timer is also our idle-state monitor.
++ * Keep LVGL access in the LVGL timer context and avoid new threads/timers.
++ * The screen stays drawn, including the last eye position, during idle.
 + */
-+#if IS_ENABLED(CONFIG_PMW3610_ALT) && DT_NODE_EXISTS(DT_NODELABEL(trackball))
-+#define WOLFIE_PMW3610_ATTR_CPI ((enum sensor_attribute)0)
-+#define WOLFIE_DEFAULT_CPI 1000
-+#define WOLFIE_BT1_CPI 400
-+
-+static int16_t wolfie_applied_cpi = -1;
-+
-+static void wolfie_update_profile_cpi(void)
++static void wolfie_update_eye_idle_state(void)
 +{
-+    const int profile_index = zmk_ble_active_profile_index();
-+    if (profile_index < 0) {
-+        return;
-+    }
++    if (eye_motion_timer == NULL) { return; }
 +
-+    const int16_t requested_cpi =
-+        (profile_index == 1) ? WOLFIE_BT1_CPI : WOLFIE_DEFAULT_CPI;
-+    if (requested_cpi == wolfie_applied_cpi) {
-+        return;
-+    }
++    const bool should_pause = zmk_activity_get_state() != ZMK_ACTIVITY_ACTIVE;
++    if (should_pause == eye_paused_for_idle) { return; }
 +
-+    const struct device *const sensor = DEVICE_DT_GET(DT_NODELABEL(trackball));
-+    if (!device_is_ready(sensor)) {
-+        return;
++    if (should_pause) {
++        lv_timer_pause(eye_motion_timer);
++    } else {
++        lv_timer_resume(eye_motion_timer);
 +    }
-+
-+    const struct sensor_value value = {.val1 = requested_cpi, .val2 = 0};
-+    const int result = sensor_attr_set(sensor, SENSOR_CHAN_ALL,
-+                                       WOLFIE_PMW3610_ATTR_CPI, &value);
-+    if (result == 0) {
-+        wolfie_applied_cpi = requested_cpi;
-+    }
++    eye_paused_for_idle = should_pause;
 +}
-+#else
-+static void wolfie_update_profile_cpi(void) { }
-+#endif
 +
  static void wolfie_layer_timer_cb(lv_timer_t *timer)
  {
      ARG_UNUSED(timer);
++    wolfie_update_eye_idle_state();
      wolfie_refresh_layer_status(false);
-+    wolfie_update_profile_cpi();
+     wolfie_update_profile_cpi();
  }
+@@ -246,6 +269,7 @@
+             lv_timer_delete(eye_motion_timer);
+             eye_motion_timer = NULL;
+         }
++        eye_paused_for_idle = false;
+         if (battery_refresh_timer != NULL) {
+             lv_timer_delete(battery_refresh_timer);
+             battery_refresh_timer = NULL;
+@@ -290,6 +314,7 @@
+     animation_phase = 0;
+     lv_obj_add_event_cb(screen, wolfie_status_screen_event_cb, LV_EVENT_DELETE, NULL);
+     eye_motion_timer = lv_timer_create(wolfie_eye_timer_cb, 1600, NULL);
++    eye_paused_for_idle = false;
  
- 
-@@ -259,6 +316,7 @@
-     wolfie_current_connected = 0;
-     wolfie_bt_ticks = 0U;
-     wolfie_refresh_layer_status(true);
-+    wolfie_update_profile_cpi();
-     wolfie_layer_timer = lv_timer_create(wolfie_layer_timer_cb,
-                                         WOLFIE_LAYER_REFRESH_MS, NULL);
- 
+     /* 3 digits + percent, in physical reading order. Use hidden leading zeroes. */
+     for (uint8_t i = 0; i < 3U; ++i) {

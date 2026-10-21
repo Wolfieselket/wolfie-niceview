@@ -16,6 +16,7 @@
 #include <zmk/battery.h>
 #include <zmk/keymap.h>
 #include <zmk/ble.h>
+#include <zmk/activity.h>
 #include "assets/wolfie_combined_status_glyphs.h"
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 #include <zmk/usb.h>
@@ -39,6 +40,8 @@ static const uint16_t eye_hold_ms[] = { 850, 1400, 850, 2500 };
 static lv_obj_t *animated_eye;
 static lv_timer_t *eye_motion_timer;
 static uint8_t animation_phase;
+/* Pause only eye movement in normal idle; leave its last frame visible. */
+static bool eye_paused_for_idle = false;
 
 /* Right-side battery display, physically upright thanks to pre-rotated A1 glyphs. */
 #define WOLFIE_BATTERY_X 119  /* physical display left edge of the 4-character reading */
@@ -159,9 +162,29 @@ static void wolfie_update_profile_cpi(void)
 static void wolfie_update_profile_cpi(void) { }
 #endif
 
+/* The existing 250 ms status timer is also our idle-state monitor.
+ * Keep LVGL access in the LVGL timer context and avoid new threads/timers.
+ * The screen stays drawn, including the last eye position, during idle.
+ */
+static void wolfie_update_eye_idle_state(void)
+{
+    if (eye_motion_timer == NULL) { return; }
+
+    const bool should_pause = zmk_activity_get_state() != ZMK_ACTIVITY_ACTIVE;
+    if (should_pause == eye_paused_for_idle) { return; }
+
+    if (should_pause) {
+        lv_timer_pause(eye_motion_timer);
+    } else {
+        lv_timer_resume(eye_motion_timer);
+    }
+    eye_paused_for_idle = should_pause;
+}
+
 static void wolfie_layer_timer_cb(lv_timer_t *timer)
 {
     ARG_UNUSED(timer);
+    wolfie_update_eye_idle_state();
     wolfie_refresh_layer_status(false);
     wolfie_update_profile_cpi();
 }
@@ -246,6 +269,7 @@ static void wolfie_status_screen_event_cb(lv_event_t *event)
             lv_timer_delete(eye_motion_timer);
             eye_motion_timer = NULL;
         }
+        eye_paused_for_idle = false;
         if (battery_refresh_timer != NULL) {
             lv_timer_delete(battery_refresh_timer);
             battery_refresh_timer = NULL;
@@ -290,6 +314,7 @@ lv_obj_t *zmk_display_status_screen(void)
     animation_phase = 0;
     lv_obj_add_event_cb(screen, wolfie_status_screen_event_cb, LV_EVENT_DELETE, NULL);
     eye_motion_timer = lv_timer_create(wolfie_eye_timer_cb, 1600, NULL);
+    eye_paused_for_idle = false;
 
     /* 3 digits + percent, in physical reading order. Use hidden leading zeroes. */
     for (uint8_t i = 0; i < 3U; ++i) {
