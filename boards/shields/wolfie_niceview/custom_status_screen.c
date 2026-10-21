@@ -1,54 +1,43 @@
 /*
- * Wolfie nice!view — animation stage 1 + battery percentage and USB power status.
+ * Wolfie right nice!view — 48-frame orbiting planet animation.
  *
- * Preserve the two proven, small 1-bit sprite assets, the physical 180-degree
- * pre-rotation, and all display hardware configuration.
- *
- * For the first live animation test, the eye gently drifts left and right;
- * the WOLFIE R label remains stationary. This tests scheduled LVGL updates,
- * not pupil movement or trackball-reactive behaviour yet.
+ * Only the original eye graphic and its LVGL timer are replaced.
+ * Existing five-layer status, Bluetooth, battery/USB rendering, 180-degree
+ * physical rotation, and external ZMK idle/deep-sleep/CPI settings stay as-is.
  */
 #include <lvgl.h>
 #include <zephyr/kernel.h>
-#include <zephyr/device.h>
-#include <zephyr/devicetree.h>
-#include <zephyr/drivers/sensor.h>
 #include <zmk/battery.h>
 #include <zmk/keymap.h>
 #include <zmk/ble.h>
-#include <zmk/activity.h>
 #include "assets/wolfie_combined_status_glyphs.h"
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 #include <zmk/usb.h>
 #endif
 #include "assets/wolfie_battery_glyphs.h"
 #include <stdint.h>
-#include "assets/wolfie_eye_upright.h"
+#include "assets/wolfie_orbit_animation.h"
 #include "assets/wolfie_label_upright.h"
 
 #define WOLFIE_LCD_WIDTH 160
-#define WOLFIE_EYE_BASE_X ((WOLFIE_LCD_WIDTH - UPRIGHT_EYE_WIDTH) / 2)
+#define WOLFIE_LCD_HEIGHT 68
+/* 74x46 matches the former eye; preserve its LVGL position exactly. */
+#define WOLFIE_ORBIT_WIDTH 74
+#define WOLFIE_ORBIT_HEIGHT 46
+#define WOLFIE_ORBIT_FRAME_COUNT 48U
+#define WOLFIE_ORBIT_FRAME_MS 85U
+#define WOLFIE_PLANET_BASE_X ((WOLFIE_LCD_WIDTH - WOLFIE_ORBIT_WIDTH) / 2)
+#define WOLFIE_PLANET_BASE_Y 19
 
-/*
- * The display is mounted 180 degrees from LVGL coordinates, so a positive
- * logical X offset makes the eye move LEFT when viewed on the keyboard.
- * Stages: left, centre, right, centre; initial position is centre.
- */
-static const int8_t eye_x_offsets[] = { +4, 0, -4, 0 };
-static const uint16_t eye_hold_ms[] = { 850, 1400, 850, 2500 };
-
-static lv_obj_t *animated_eye;
-static lv_timer_t *eye_motion_timer;
-static uint8_t animation_phase;
-/* Pause only eye movement in normal idle; leave its last frame visible. */
-static bool eye_paused_for_idle = false;
+static lv_obj_t *animated_planet;
+static lv_timer_t *planet_motion_timer;
+static uint8_t planet_next_frame;
 
 /* Right-side battery display, physically upright thanks to pre-rotated A1 glyphs. */
 #define WOLFIE_BATTERY_X 119  /* physical display left edge of the 4-character reading */
 #define WOLFIE_BATTERY_Y 21
 #define WOLFIE_USB_X 128
 #define WOLFIE_USB_Y 37
-#define WOLFIE_LCD_HEIGHT 68
 
 static lv_obj_t *battery_glyph[4];
 static lv_obj_t *usb_glyph;
@@ -57,7 +46,7 @@ static int16_t previous_level = -1;
 static int8_t previous_usb = -1;
 
 /* One status object shared by layer + Bluetooth indicator.
- * No extra LVGL widgets or timers beyond the hardware-tested layer version.
+ * No additional LVGL widgets/timers beyond the original eye layout.
  * Layer is polled at 250ms; active Bluetooth profile at 1000ms.
  */
 #define WOLFIE_STATUS_X 3
@@ -71,10 +60,7 @@ static int8_t wolfie_last_connected = -1;
 static int8_t wolfie_current_connected = 0;
 static uint8_t wolfie_bt_ticks = 0U;
 
-/* Read the actual active ZMK layer. The original code collapsed every nonzero
- * layer into FUNCTION; these pre-rotated combined sprites cover layers 0..4.
- * Unknown/new layers deliberately show LAYER rather than the wrong name.
- */
+/* Show all five tested Wolfie keymap layer labels. */
 static const lv_image_dsc_t *wolfie_status_sprite(uint8_t layer, uint8_t connected)
 {
     switch (layer) {
@@ -109,91 +95,14 @@ static void wolfie_refresh_layer_status(bool force_bluetooth)
     }
 }
 
-/*
- * Trackball sensitivity by ZMK host profile (zero-based indices):
- *   BT1 => 400 CPI (near MX Ergo's 380 CPI default)
- *   BT0, BT2, BT3, BT4 => 1000 CPI
- *
- * Only run on a board which has Wolfie's PMW3610. In particular the
- * stand-alone nice!view build does not have a trackball device.
- *
- * This fork's src/pmw3610.h defines PMW3610_ALT_ATTR_CPI as its first
- * enum entry (value 0). The enum is in a private driver header, which
- * isn't exported to external display shield sources. Use its verified
- * numeric value via Zephyr's public sensor_attr_set() interface.
- *
- * Sensor init is asynchronous (including Wolfie's +1000 ms startup delay).
- * An -EBUSY result is expected during boot; retry on the next existing
- * 250 ms status timer tick. Only reprogram when the target CPI changes.
- */
-#if IS_ENABLED(CONFIG_PMW3610_ALT) && DT_NODE_EXISTS(DT_NODELABEL(trackball))
-#define WOLFIE_PMW3610_ATTR_CPI ((enum sensor_attribute)0)
-#define WOLFIE_DEFAULT_CPI 1000
-#define WOLFIE_BT1_CPI 400
-
-static int16_t wolfie_applied_cpi = -1;
-
-static void wolfie_update_profile_cpi(void)
-{
-    const int profile_index = zmk_ble_active_profile_index();
-    if (profile_index < 0) {
-        return;
-    }
-
-    const int16_t requested_cpi =
-        (profile_index == 1) ? WOLFIE_BT1_CPI : WOLFIE_DEFAULT_CPI;
-    if (requested_cpi == wolfie_applied_cpi) {
-        return;
-    }
-
-    const struct device *const sensor = DEVICE_DT_GET(DT_NODELABEL(trackball));
-    if (!device_is_ready(sensor)) {
-        return;
-    }
-
-    const struct sensor_value value = {.val1 = requested_cpi, .val2 = 0};
-    const int result = sensor_attr_set(sensor, SENSOR_CHAN_ALL,
-                                       WOLFIE_PMW3610_ATTR_CPI, &value);
-    if (result == 0) {
-        wolfie_applied_cpi = requested_cpi;
-    }
-}
-#else
-static void wolfie_update_profile_cpi(void) { }
-#endif
-
-/* The existing 250 ms status timer is also our idle-state monitor.
- * Keep LVGL access in the LVGL timer context and avoid new threads/timers.
- * The screen stays drawn, including the last eye position, during idle.
- */
-static void wolfie_update_eye_idle_state(void)
-{
-    if (eye_motion_timer == NULL) { return; }
-
-    const bool should_pause = zmk_activity_get_state() != ZMK_ACTIVITY_ACTIVE;
-    if (should_pause == eye_paused_for_idle) { return; }
-
-    if (should_pause) {
-        lv_timer_pause(eye_motion_timer);
-    } else {
-        lv_timer_resume(eye_motion_timer);
-    }
-    eye_paused_for_idle = should_pause;
-}
-
 static void wolfie_layer_timer_cb(lv_timer_t *timer)
 {
     ARG_UNUSED(timer);
-    wolfie_update_eye_idle_state();
     wolfie_refresh_layer_status(false);
-    wolfie_update_profile_cpi();
 }
 
-
-/* Objects are positioned in logical LVGL coordinates. Hardware is mounted 180°.
- * Thus we reflect the physical positions, while the image data is itself rotated.
- * Never rotate the complete display with LVGL; that broke our earlier tests.
- */
+/* Hardware is mounted 180 degrees. Reflect LVGL positions and use
+ * pre-rotated A1 image bytes: do NOT rotate the entire LVGL display. */
 static lv_obj_t *wolfie_make_glyph(lv_obj_t *screen, const lv_image_dsc_t *img,
                                    int phys_x, int phys_y)
 {
@@ -208,7 +117,7 @@ static lv_obj_t *wolfie_make_glyph(lv_obj_t *screen, const lv_image_dsc_t *img,
 
 static void wolfie_refresh_battery(void)
 {
-    /* ZMK's own battery reading is a voltage-based percentage estimate. */
+    /* ZMK's battery reading is a voltage-based percentage estimate. */
     uint8_t level = zmk_battery_state_of_charge();
     if (level > 100U) { level = 100U; }
 
@@ -248,28 +157,27 @@ static void wolfie_battery_timer_cb(lv_timer_t *timer)
     wolfie_refresh_battery();
 }
 
-static void wolfie_eye_timer_cb(lv_timer_t *timer)
+/* The first frame is set at creation; timer advances through all 48 frames.
+ * Keeping the former single LVGL timer preserves current idle/wake handling.
+ */
+static void wolfie_planet_timer_cb(lv_timer_t *timer)
 {
-    if (animated_eye == NULL) {
+    ARG_UNUSED(timer);
+    if (animated_planet == NULL) {
         return;
     }
-
-    uint8_t phase = animation_phase;
-    lv_obj_set_x(animated_eye, WOLFIE_EYE_BASE_X + eye_x_offsets[phase]);
-    lv_timer_set_period(timer, eye_hold_ms[phase]);
-
-    animation_phase = (uint8_t)((phase + 1U) % 4U);
+    lv_image_set_src(animated_planet, wolfie_orbit_frames[planet_next_frame]);
+    planet_next_frame = (uint8_t)((planet_next_frame + 1U) % WOLFIE_ORBIT_FRAME_COUNT);
 }
 
-/* Release the timer if ZMK/LVGL ever replaces the status screen. */
+/* Release timers if ZMK/LVGL ever replaces the status screen. */
 static void wolfie_status_screen_event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_DELETE) {
-        if (eye_motion_timer != NULL) {
-            lv_timer_delete(eye_motion_timer);
-            eye_motion_timer = NULL;
+        if (planet_motion_timer != NULL) {
+            lv_timer_delete(planet_motion_timer);
+            planet_motion_timer = NULL;
         }
-        eye_paused_for_idle = false;
         if (battery_refresh_timer != NULL) {
             lv_timer_delete(battery_refresh_timer);
             battery_refresh_timer = NULL;
@@ -279,7 +187,7 @@ static void wolfie_status_screen_event_cb(lv_event_t *event)
             wolfie_layer_timer = NULL;
         }
         wolfie_layer_status = NULL;
-        animated_eye = NULL;
+        animated_planet = NULL;
         usb_glyph = NULL;
         for (uint8_t i = 0; i < 4U; ++i) { battery_glyph[i] = NULL; }
     }
@@ -295,26 +203,25 @@ lv_obj_t *zmk_display_status_screen(void)
     lv_obj_set_style_pad_all(screen, 0, 0);
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Original working, pre-rotated 74x46 eye at logical y=19. */
-    lv_obj_t *eye = lv_image_create(screen);
-    lv_image_set_src(eye, &wolfie_eye_upright);
-    lv_obj_set_pos(eye, WOLFIE_EYE_BASE_X, 19);
-    lv_obj_set_style_image_recolor(eye, lv_color_black(), 0);
-    lv_obj_set_style_image_recolor_opa(eye, LV_OPA_COVER, 0);
+    /* Replace only the original pre-rotated 74x46 eye at logical y=19. */
+    lv_obj_t *planet = lv_image_create(screen);
+    lv_image_set_src(planet, wolfie_orbit_frames[0]);
+    lv_obj_set_pos(planet, WOLFIE_PLANET_BASE_X, WOLFIE_PLANET_BASE_Y);
+    lv_obj_set_style_image_recolor(planet, lv_color_black(), 0);
+    lv_obj_set_style_image_recolor_opa(planet, LV_OPA_COVER, 0);
 
-    /* Original working pre-rotated label — deliberately remains fixed. */
+    /* Original pre-rotated label — deliberately remains fixed. */
     lv_obj_t *label = lv_image_create(screen);
     lv_image_set_src(label, &wolfie_label_upright);
     lv_obj_set_pos(label, (WOLFIE_LCD_WIDTH - UPRIGHT_LABEL_WIDTH) / 2, 2);
     lv_obj_set_style_image_recolor(label, lv_color_black(), 0);
     lv_obj_set_style_image_recolor_opa(label, LV_OPA_COVER, 0);
 
-    /* Start centred, wait before the first movement, and repeat slowly. */
-    animated_eye = eye;
-    animation_phase = 0;
+    animated_planet = planet;
+    planet_next_frame = 1U;
     lv_obj_add_event_cb(screen, wolfie_status_screen_event_cb, LV_EVENT_DELETE, NULL);
-    eye_motion_timer = lv_timer_create(wolfie_eye_timer_cb, 1600, NULL);
-    eye_paused_for_idle = false;
+    planet_motion_timer = lv_timer_create(wolfie_planet_timer_cb,
+                                           WOLFIE_ORBIT_FRAME_MS, NULL);
 
     /* 3 digits + percent, in physical reading order. Use hidden leading zeroes. */
     for (uint8_t i = 0; i < 3U; ++i) {
@@ -331,8 +238,7 @@ lv_obj_t *zmk_display_status_screen(void)
     wolfie_refresh_battery();
     battery_refresh_timer = lv_timer_create(wolfie_battery_timer_cb, 15000, NULL);
 
-    /* Replace the old layer-only sprite with one combined status image.
-     * It occupies the same leftmost region and never overlaps the eye. */
+    /* Same single combined layer+BT object as current firmware. */
     wolfie_layer_status = wolfie_make_glyph(screen,
                                            &wolfie_status_off_qwerty_img,
                                            WOLFIE_STATUS_X, WOLFIE_STATUS_Y);
@@ -341,7 +247,6 @@ lv_obj_t *zmk_display_status_screen(void)
     wolfie_current_connected = 0;
     wolfie_bt_ticks = 0U;
     wolfie_refresh_layer_status(true);
-    wolfie_update_profile_cpi();
     wolfie_layer_timer = lv_timer_create(wolfie_layer_timer_cb,
                                         WOLFIE_LAYER_REFRESH_MS, NULL);
 
