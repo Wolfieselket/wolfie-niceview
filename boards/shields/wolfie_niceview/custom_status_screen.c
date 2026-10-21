@@ -10,6 +10,7 @@
 #include <zmk/battery.h>
 #include <zmk/keymap.h>
 #include <zmk/ble.h>
+#include <zmk/activity.h>
 #include "assets/wolfie_combined_status_glyphs.h"
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 #include <zmk/usb.h>
@@ -32,6 +33,7 @@
 static lv_obj_t *animated_planet;
 static lv_timer_t *planet_motion_timer;
 static uint8_t planet_next_frame;
+static bool planet_paused_for_idle;
 
 /* Right-side battery display, physically upright thanks to pre-rotated A1 glyphs. */
 #define WOLFIE_BATTERY_X 119  /* physical display left edge of the 4-character reading */
@@ -98,6 +100,18 @@ static void wolfie_refresh_layer_status(bool force_bluetooth)
 static void wolfie_layer_timer_cb(lv_timer_t *timer)
 {
     ARG_UNUSED(timer);
+    /* Suspend only the orbit animation when ZMK is idle. */
+    if (planet_motion_timer != NULL) {
+        const bool should_pause = zmk_activity_get_state() != ZMK_ACTIVITY_ACTIVE;
+        if (should_pause != planet_paused_for_idle) {
+            if (should_pause) {
+                lv_timer_pause(planet_motion_timer);
+            } else {
+                lv_timer_resume(planet_motion_timer);
+            }
+            planet_paused_for_idle = should_pause;
+        }
+    }
     wolfie_refresh_layer_status(false);
 }
 
@@ -219,6 +233,7 @@ lv_obj_t *zmk_display_status_screen(void)
 
     animated_planet = planet;
     planet_next_frame = 1U;
+    planet_paused_for_idle = false;
     lv_obj_add_event_cb(screen, wolfie_status_screen_event_cb, LV_EVENT_DELETE, NULL);
     planet_motion_timer = lv_timer_create(wolfie_planet_timer_cb,
                                            WOLFIE_ORBIT_FRAME_MS, NULL);
