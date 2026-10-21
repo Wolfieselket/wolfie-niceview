@@ -10,6 +10,9 @@
  */
 #include <lvgl.h>
 #include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/drivers/sensor.h>
 #include <zmk/battery.h>
 #include <zmk/keymap.h>
 #include <zmk/ble.h>
@@ -103,10 +106,64 @@ static void wolfie_refresh_layer_status(bool force_bluetooth)
     }
 }
 
+/*
+ * Trackball sensitivity by ZMK host profile (zero-based indices):
+ *   BT1 => 400 CPI (near MX Ergo's 380 CPI default)
+ *   BT0, BT2, BT3, BT4 => 1000 CPI
+ *
+ * Only run on a board which has Wolfie's PMW3610. In particular the
+ * stand-alone nice!view build does not have a trackball device.
+ *
+ * This fork's src/pmw3610.h defines PMW3610_ALT_ATTR_CPI as its first
+ * enum entry (value 0). The enum is in a private driver header, which
+ * isn't exported to external display shield sources. Use its verified
+ * numeric value via Zephyr's public sensor_attr_set() interface.
+ *
+ * Sensor init is asynchronous (including Wolfie's +1000 ms startup delay).
+ * An -EBUSY result is expected during boot; retry on the next existing
+ * 250 ms status timer tick. Only reprogram when the target CPI changes.
+ */
+#if IS_ENABLED(CONFIG_PMW3610_ALT) && DT_NODE_EXISTS(DT_NODELABEL(trackball))
+#define WOLFIE_PMW3610_ATTR_CPI ((enum sensor_attribute)0)
+#define WOLFIE_DEFAULT_CPI 1000
+#define WOLFIE_BT1_CPI 400
+
+static int16_t wolfie_applied_cpi = -1;
+
+static void wolfie_update_profile_cpi(void)
+{
+    const int profile_index = zmk_ble_active_profile_index();
+    if (profile_index < 0) {
+        return;
+    }
+
+    const int16_t requested_cpi =
+        (profile_index == 1) ? WOLFIE_BT1_CPI : WOLFIE_DEFAULT_CPI;
+    if (requested_cpi == wolfie_applied_cpi) {
+        return;
+    }
+
+    const struct device *const sensor = DEVICE_DT_GET(DT_NODELABEL(trackball));
+    if (!device_is_ready(sensor)) {
+        return;
+    }
+
+    const struct sensor_value value = {.val1 = requested_cpi, .val2 = 0};
+    const int result = sensor_attr_set(sensor, SENSOR_CHAN_ALL,
+                                       WOLFIE_PMW3610_ATTR_CPI, &value);
+    if (result == 0) {
+        wolfie_applied_cpi = requested_cpi;
+    }
+}
+#else
+static void wolfie_update_profile_cpi(void) { }
+#endif
+
 static void wolfie_layer_timer_cb(lv_timer_t *timer)
 {
     ARG_UNUSED(timer);
     wolfie_refresh_layer_status(false);
+    wolfie_update_profile_cpi();
 }
 
 
@@ -259,6 +316,7 @@ lv_obj_t *zmk_display_status_screen(void)
     wolfie_current_connected = 0;
     wolfie_bt_ticks = 0U;
     wolfie_refresh_layer_status(true);
+    wolfie_update_profile_cpi();
     wolfie_layer_timer = lv_timer_create(wolfie_layer_timer_cb,
                                         WOLFIE_LAYER_REFRESH_MS, NULL);
 
