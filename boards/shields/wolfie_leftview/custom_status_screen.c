@@ -1,7 +1,9 @@
 /*
  * Cassini SXR-02-L: animated spacecraft passing through the existing
- * user-selected 160x68 Wolfie space scene; battery and LINK remain visible.
- * Keep Bluetooth peripheral, matrix, SPI and orientation unchanged.
+ * user-selected 160x68 space scene; battery and LINK remain visible.
+ * New Saturn enclosure mounts the left LCD 180 degrees relative to Wolfie.
+ * Rotate assets and mirror their positions; do not rotate the LVGL driver.
+ * Keep Bluetooth peripheral, matrix and SPI unchanged.
  */
 #include <lvgl.h>
 #include <stdint.h>
@@ -15,12 +17,23 @@
 #include "assets/wolfie_space_tiles.h"
 #include "assets/cassini_left_orbit.h"
 
+#define WOLFIE_DISPLAY_W 160
+#define WOLFIE_DISPLAY_H 68
+
+/* Mirror positions to complement all pre-rotated A1 sprite pixels. */
+static void saturn_left_set_rotated_pos(lv_obj_t *obj, int32_t x, int32_t y,
+                                         int32_t w, int32_t h)
+{
+    lv_obj_set_pos(obj, WOLFIE_DISPLAY_W - x - w,
+                       WOLFIE_DISPLAY_H - y - h);
+}
+
 static void add_white_scene_tile(lv_obj_t *screen, const lv_image_dsc_t *src,
                                   int32_t x, int32_t y)
 {
     lv_obj_t *sprite = lv_image_create(screen);
     lv_image_set_src(sprite, src);
-    lv_obj_set_pos(sprite, x, y);
+    saturn_left_set_rotated_pos(sprite, x, y, src->header.w, src->header.h);
     lv_obj_set_style_image_recolor(sprite, lv_color_white(), 0);
     lv_obj_set_style_image_recolor_opa(sprite, LV_OPA_COVER, 0);
 }
@@ -30,13 +43,10 @@ static void add_white_scene_tile(lv_obj_t *screen, const lv_image_dsc_t *src,
 /* Local battery reporting on the left ZMK BLE peripheral (not the right half's
  * percentage). No split BLE settings or keyboard scan configuration changed.
  *
- * The static scene bitmaps are already oriented correctly on the actual
- * display. Battery sprites must use those SAME coordinates, without the
- * extra 180-degree position flip. CONFIG_ZMK_DISPLAY_INVERT=y means the
- * LVGL white backing appears black, and black-recolored digits appear white.
+ * Cassini left artwork and glyphs are pre-rotated 180 degrees; their
+ * LVGL positions must be mirrored too, while keeping the existing colour
+ * inversion, battery reporting, and split LINK logic unchanged.
  */
-#define WOLFIE_DISPLAY_W 160
-#define WOLFIE_DISPLAY_H 68
 #define WOLFIE_BATT_BOX_X 2
 #define WOLFIE_BATT_BOX_Y 2
 #define WOLFIE_BATT_BOX_W 33
@@ -105,9 +115,9 @@ static lv_obj_t *wolfie_left_create_digit(lv_obj_t *screen,
 {
     lv_obj_t *obj = lv_image_create(screen);
     lv_image_set_src(obj, image);
-    /* Scene sprites and display coordinates are already upright.
-     * Do not mirror the battery digits independently. */
-    lv_obj_set_pos(obj, physical_x, physical_y);
+    /* Digit and LINK glyph pixels are pre-rotated in their asset files. */
+    saturn_left_set_rotated_pos(obj, physical_x, physical_y,
+                                 image->header.w, image->header.h);
     lv_obj_set_style_image_recolor(obj, lv_color_black(), 0);
     lv_obj_set_style_image_recolor_opa(obj, LV_OPA_COVER, 0);
     return obj;
@@ -179,7 +189,8 @@ static void wolfie_left_add_battery_status(lv_obj_t *screen)
     /* The small backing masks a few stars so battery digits stay readable. */
     lv_obj_t *backing = lv_obj_create(screen);
     lv_obj_set_size(backing, WOLFIE_BATT_BOX_W, WOLFIE_BATT_BOX_H);
-    lv_obj_set_pos(backing, WOLFIE_BATT_BOX_X, WOLFIE_BATT_BOX_Y);
+    saturn_left_set_rotated_pos(backing, WOLFIE_BATT_BOX_X, WOLFIE_BATT_BOX_Y,
+                                 WOLFIE_BATT_BOX_W, WOLFIE_BATT_BOX_H);
     lv_obj_set_style_bg_color(backing, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(backing, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(backing, 0, 0);
@@ -220,12 +231,13 @@ lv_obj_t *zmk_display_status_screen(void)
     add_white_scene_tile(screen, &wolfie_space_tile_2, 0, 34);
     add_white_scene_tile(screen, &wolfie_space_tile_3, 80, 34);
 
-    /* A small moving spacecraft over the empty middle of the static artwork.
-     * The screen's original orientation and inversion are already correct.
-     */
+    /* The orbiter follows the same 180-degree transform as the starfield. */
     cassini_left_orbit = lv_image_create(screen);
     lv_image_set_src(cassini_left_orbit, cassini_left_orbit_frames[0]);
-    lv_obj_set_pos(cassini_left_orbit, CASSINI_LEFT_ORBIT_X, CASSINI_LEFT_ORBIT_Y);
+    saturn_left_set_rotated_pos(cassini_left_orbit,
+                                 CASSINI_LEFT_ORBIT_X, CASSINI_LEFT_ORBIT_Y,
+                                 cassini_left_orbit_frames[0]->header.w,
+                                 cassini_left_orbit_frames[0]->header.h);
     lv_obj_set_style_image_recolor(cassini_left_orbit, lv_color_black(), 0);
     lv_obj_set_style_image_recolor_opa(cassini_left_orbit, LV_OPA_COVER, 0);
     cassini_left_orbit_next_frame = 1U;
@@ -238,7 +250,7 @@ lv_obj_t *zmk_display_status_screen(void)
      * The left screen's known-good inversion means white here appears black. */
     lv_obj_t *link_backing = lv_obj_create(screen);
     lv_obj_set_size(link_backing, 31, 11);
-    lv_obj_set_pos(link_backing, WOLFIE_LINK_X, WOLFIE_LINK_Y);
+    saturn_left_set_rotated_pos(link_backing, WOLFIE_LINK_X, WOLFIE_LINK_Y, 31, 11);
     lv_obj_set_style_bg_color(link_backing, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(link_backing, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(link_backing, 0, 0);
