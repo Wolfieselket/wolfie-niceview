@@ -2,8 +2,9 @@
  * Wolfie right nice!view — 48-frame orbiting planet animation.
  *
  * Only the original eye graphic and its LVGL timer are replaced.
- * Existing five-layer status, Bluetooth, battery/USB rendering, 180-degree
- * physical rotation, and external ZMK idle/deep-sleep settings stay as-is.
+ * Existing five-layer status, Bluetooth, battery/USB rendering,
+ * and external ZMK idle/deep-sleep settings stay as-is.
+ * Cassini changes asset orientation and positioning for the new mounting.
  * CPI switches by selected BT profile: BT1=400, others=1000.
  */
 #include <lvgl.h>
@@ -33,14 +34,14 @@
 #define WOLFIE_ORBIT_FRAME_COUNT 48U
 #define WOLFIE_ORBIT_FRAME_MS 85U
 #define WOLFIE_PLANET_BASE_X ((WOLFIE_LCD_WIDTH - WOLFIE_ORBIT_WIDTH) / 2)
-#define WOLFIE_PLANET_BASE_Y 19
+#define WOLFIE_PLANET_BASE_Y 3
 
 static lv_obj_t *animated_planet;
 static lv_timer_t *planet_motion_timer;
 static uint8_t planet_next_frame;
 static bool planet_paused_for_idle;
 
-/* Right-side battery display, physically upright thanks to pre-rotated A1 glyphs. */
+/* Right-side battery display, using Cassini upright A1 glyphs. */
 #define WOLFIE_BATTERY_X 119  /* physical display left edge of the 4-character reading */
 #define WOLFIE_BATTERY_Y 21
 #define WOLFIE_USB_X 128
@@ -156,15 +157,13 @@ static void wolfie_layer_timer_cb(lv_timer_t *timer)
     wolfie_refresh_layer_status(false);
 }
 
-/* Hardware is mounted 180 degrees. Reflect LVGL positions and use
- * pre-rotated A1 image bytes: do NOT rotate the entire LVGL display. */
+/* Cassini upright mounting: use direct positions and physically upright A1 assets. */
 static lv_obj_t *wolfie_make_glyph(lv_obj_t *screen, const lv_image_dsc_t *img,
                                    int phys_x, int phys_y)
 {
     lv_obj_t *obj = lv_image_create(screen);
     lv_image_set_src(obj, img);
-    lv_obj_set_pos(obj, WOLFIE_LCD_WIDTH - phys_x - img->header.w,
-                   WOLFIE_LCD_HEIGHT - phys_y - img->header.h);
+    lv_obj_set_pos(obj, phys_x, phys_y);
     lv_obj_set_style_image_recolor(obj, lv_color_black(), 0);
     lv_obj_set_style_image_recolor_opa(obj, LV_OPA_COVER, 0);
     return obj;
@@ -258,17 +257,18 @@ lv_obj_t *zmk_display_status_screen(void)
     lv_obj_set_style_pad_all(screen, 0, 0);
     lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Replace only the original pre-rotated 74x46 eye at logical y=19. */
+    /* Display the physically upright 74x46 orbit scene near the top edge. */
     lv_obj_t *planet = lv_image_create(screen);
     lv_image_set_src(planet, wolfie_orbit_frames[0]);
     lv_obj_set_pos(planet, WOLFIE_PLANET_BASE_X, WOLFIE_PLANET_BASE_Y);
     lv_obj_set_style_image_recolor(planet, lv_color_black(), 0);
     lv_obj_set_style_image_recolor_opa(planet, LV_OPA_COVER, 0);
 
-    /* Original pre-rotated label — deliberately remains fixed. */
+    /* The label is upright, at the bottom edge in the new physical mounting. */
     lv_obj_t *label = lv_image_create(screen);
     lv_image_set_src(label, &wolfie_label_upright);
-    lv_obj_set_pos(label, (WOLFIE_LCD_WIDTH - UPRIGHT_LABEL_WIDTH) / 2, 2);
+    lv_obj_set_pos(label, (WOLFIE_LCD_WIDTH - UPRIGHT_LABEL_WIDTH) / 2,
+                   WOLFIE_LCD_HEIGHT - 2 - UPRIGHT_LABEL_HEIGHT);
     lv_obj_set_style_image_recolor(label, lv_color_black(), 0);
     lv_obj_set_style_image_recolor_opa(label, LV_OPA_COVER, 0);
 
