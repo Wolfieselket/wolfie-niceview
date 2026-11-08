@@ -2,7 +2,7 @@
  * Wolfie right nice!view — 48-frame orbiting planet animation.
  *
  * Only the original eye graphic and its LVGL timer are replaced.
- * Existing five-layer status, Bluetooth, battery/USB rendering,
+ * Existing six-layer status, Bluetooth, battery/USB rendering,
  * and external ZMK idle/deep-sleep settings stay as-is.
  * Cassini changes asset orientation and positioning for the new mounting.
  * CPI switches by selected BT profile: BT1=400, others=1000.
@@ -101,7 +101,7 @@ static void wolfie_refresh_profile_cpi(void)
 }
 #endif
 
-/* Show all five tested Wolfie keymap layer labels. */
+/* Show original five keymap layers plus Cassini's sixth H-SCROLL mode. */
 static const lv_image_dsc_t *wolfie_status_sprite(uint8_t layer, uint8_t connected)
 {
     switch (layer) {
@@ -115,6 +115,8 @@ static const lv_image_dsc_t *wolfie_status_sprite(uint8_t layer, uint8_t connect
         return connected ? &wolfie_status_on_mouse_img : &wolfie_status_off_mouse_img;
     case 4:
         return connected ? &wolfie_status_on_gaming_img : &wolfie_status_off_gaming_img;
+    case 5:
+        return connected ? &cassini_status_on_hscroll_img : &cassini_status_off_hscroll_img;
     default:
         return connected ? &wolfie_status_on_layer_img : &wolfie_status_off_layer_img;
     }
