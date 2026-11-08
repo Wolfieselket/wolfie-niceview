@@ -1,17 +1,19 @@
 /*
- * Static Wolfie L 160x68 space scene, preserving the existing split and SPI.
- * Uses the user's chosen source image, with a readable WOLFIE L label.
- * Only local battery-status timer; no changes to input devices or roles.
+ * Cassini SXR-02-L: animated spacecraft passing through the existing
+ * user-selected 160x68 Wolfie space scene; battery and LINK remain visible.
+ * Keep Bluetooth peripheral, matrix, SPI and orientation unchanged.
  */
 #include <lvgl.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <zephyr/kernel.h>
 #include <zmk/battery.h>
+#include <zmk/activity.h>
 #include <zmk/split/bluetooth/peripheral.h>
 #include "assets/wolfie_left_status_glyphs.h"
 #include "assets/wolfie_left_battery_glyphs.h"
 #include "assets/wolfie_space_tiles.h"
+#include "assets/cassini_left_orbit.h"
 
 static void add_white_scene_tile(lv_obj_t *screen, const lv_image_dsc_t *src,
                                   int32_t x, int32_t y)
@@ -50,6 +52,22 @@ static int16_t wolfie_left_last_charge = -1;
 #define WOLFIE_LINK_X 127
 #define WOLFIE_LINK_Y 2
 #define WOLFIE_LINK_POLL_MS 1500
+/* Lightweight 24-frame orbiter pauses whenever ZMK leaves ACTIVE state. */
+static lv_obj_t *cassini_left_orbit;
+static lv_timer_t *cassini_left_orbit_timer;
+static uint8_t cassini_left_orbit_next_frame;
+static bool cassini_left_orbit_paused_for_idle;
+
+static void cassini_left_orbit_timer_cb(lv_timer_t *timer)
+{
+    ARG_UNUSED(timer);
+    if (cassini_left_orbit == NULL) { return; }
+    lv_image_set_src(cassini_left_orbit,
+                     cassini_left_orbit_frames[cassini_left_orbit_next_frame]);
+    cassini_left_orbit_next_frame =
+        (uint8_t)((cassini_left_orbit_next_frame + 1U) % CASSINI_LEFT_ORBIT_FRAME_COUNT);
+}
+
 static lv_obj_t *wolfie_left_link_status;
 static lv_timer_t *wolfie_left_link_timer;
 static int8_t wolfie_left_last_link = -1;
@@ -67,6 +85,18 @@ static void wolfie_left_link_timer_cb(lv_timer_t *timer)
 {
     ARG_UNUSED(timer);
     wolfie_left_refresh_link();
+    /* Reuse the existing LINK poll to manage animation idle/wake state. */
+    if (cassini_left_orbit_timer != NULL) {
+        const bool should_pause = zmk_activity_get_state() != ZMK_ACTIVITY_ACTIVE;
+        if (should_pause != cassini_left_orbit_paused_for_idle) {
+            if (should_pause) {
+                lv_timer_pause(cassini_left_orbit_timer);
+            } else {
+                lv_timer_resume(cassini_left_orbit_timer);
+            }
+            cassini_left_orbit_paused_for_idle = should_pause;
+        }
+    }
 }
 
 static lv_obj_t *wolfie_left_create_digit(lv_obj_t *screen,
@@ -129,6 +159,13 @@ static void wolfie_left_screen_delete_cb(lv_event_t *event)
         lv_timer_delete(wolfie_left_link_timer);
         wolfie_left_link_timer = NULL;
     }
+    if (cassini_left_orbit_timer != NULL) {
+        lv_timer_delete(cassini_left_orbit_timer);
+        cassini_left_orbit_timer = NULL;
+    }
+    cassini_left_orbit = NULL;
+    cassini_left_orbit_next_frame = 0U;
+    cassini_left_orbit_paused_for_idle = false;
     wolfie_left_link_status = NULL;
     wolfie_left_last_link = -1;
     for (uint8_t i = 0; i < 4U; ++i) {
@@ -182,6 +219,20 @@ lv_obj_t *zmk_display_status_screen(void)
     add_white_scene_tile(screen, &wolfie_space_tile_1, 80, 0);
     add_white_scene_tile(screen, &wolfie_space_tile_2, 0, 34);
     add_white_scene_tile(screen, &wolfie_space_tile_3, 80, 34);
+
+    /* A small moving spacecraft over the empty middle of the static artwork.
+     * The screen's original orientation and inversion are already correct.
+     */
+    cassini_left_orbit = lv_image_create(screen);
+    lv_image_set_src(cassini_left_orbit, cassini_left_orbit_frames[0]);
+    lv_obj_set_pos(cassini_left_orbit, CASSINI_LEFT_ORBIT_X, CASSINI_LEFT_ORBIT_Y);
+    lv_obj_set_style_image_recolor(cassini_left_orbit, lv_color_black(), 0);
+    lv_obj_set_style_image_recolor_opa(cassini_left_orbit, LV_OPA_COVER, 0);
+    cassini_left_orbit_next_frame = 1U;
+    cassini_left_orbit_paused_for_idle = false;
+    cassini_left_orbit_timer = lv_timer_create(
+        cassini_left_orbit_timer_cb, CASSINI_LEFT_ORBIT_FRAME_MS, NULL);
+
     wolfie_left_add_battery_status(screen);
     /* Small monochrome masking rectangle keeps the starfield behind LINK legible.
      * The left screen's known-good inversion means white here appears black. */
