@@ -74,12 +74,12 @@ static int8_t cassini_last_bt_profile = -1;
 
 /*
  * Restore profile-aware CPI without adding a new LVGL timer.
- * BT profile index 1 = 400 CPI; every other profile = 1000 CPI.
- * Default device-tree CPI remains 1000 for startup.
+ * ZMK profile index 1 (the existing 400 CPI exception) stays unchanged;
+ * every other profile uses 800 CPI. The device-tree startup CPI is 800.
  */
 #if IS_ENABLED(CONFIG_PMW3610_ALT)
 #define WOLFIE_CPI_BT1 400U
-#define WOLFIE_CPI_DEFAULT 1000U
+#define WOLFIE_CPI_DEFAULT 800U
 /* PMW3610_ALT_ATTR_CPI is enum value 0 in the installed PMW3610 ALT driver.
  * Its enum currently lives in the driver's internal src/pmw3610.h, not a
  * public header. Re-check this value if updating that driver module.
