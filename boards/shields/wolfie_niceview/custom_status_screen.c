@@ -328,8 +328,12 @@ lv_obj_t *zmk_display_status_screen(void)
     /* Top-right profile slot has its own 17x9 image, away from battery.
      * It indicates the selected host regardless of pairing/connectivity.
      */
-    cassini_bt_profile_glyph = wolfie_make_glyph(
-        screen, cassini_bt_profile_images[0], CASSINI_BT_PROFILE_X, CASSINI_BT_PROFILE_Y);
+    /* Diagnostic only: do not allocate the extra BT-profile LVGL image.
+     * This isolates a possible display-object/resource interaction.
+     * The host Bluetooth name, selected profile, CPI, and orbit animation
+     * are deliberately left unchanged. BT slot badge is temporarily hidden.
+     */
+    cassini_bt_profile_glyph = NULL;
     cassini_last_bt_profile = -1;
 
     wolfie_refresh_layer_status(true);
