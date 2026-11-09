@@ -18,7 +18,7 @@
 #include <zmk/ble.h>
 #include <zmk/activity.h>
 #include "assets/wolfie_combined_status_glyphs.h"
-#include "assets/cassini_bt_profile_glyphs.h"
+#include "assets/cassini_status_profile_composites.h"
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 #include <zmk/usb.h>
 #endif
@@ -54,9 +54,9 @@ static lv_timer_t *battery_refresh_timer;
 static int16_t previous_level = -1;
 static int8_t previous_usb = -1;
 
-/* One status object shared by layer + Bluetooth indicator.
- * No additional LVGL widgets/timers beyond the original eye layout.
- * Layer is polled at 250ms; active Bluetooth profile at 1000ms.
+/* One existing status object now covers layer, BLE connection, and BT1..BT5.
+ * Do not allocate another LVGL image: it hid the orbit on real hardware.
+ * Layer/profile are polled at 250ms; connection state at 1000ms.
  */
 #define WOLFIE_STATUS_X 3
 #define WOLFIE_STATUS_Y 5
@@ -69,8 +69,7 @@ static int8_t wolfie_last_connected = -1;
 static int8_t wolfie_current_connected = 0;
 static uint8_t wolfie_bt_ticks = 0U;
 
-/* Selected host slot (1-based display BT1..BT5), independent of LINK. */
-static lv_obj_t *cassini_bt_profile_glyph;
+/* Profile selection is displayed inside the existing status sprite. */
 static int8_t cassini_last_bt_profile = -1;
 
 /*
@@ -106,53 +105,36 @@ static void wolfie_refresh_profile_cpi(void)
 }
 #endif
 
-/* Show original five keymap layers plus Cassini's sixth H-SCROLL mode. */
-static const lv_image_dsc_t *wolfie_status_sprite(uint8_t layer, uint8_t connected)
+/* Show 6 layers, BT connected state and selected host slot in ONE image.
+ * Table is indexed by layer (fallback 6), connected state (0/1), and
+ * ZMK's zero-based host profile index (0..4 maps to BT1..BT5).
+ */
+static const lv_image_dsc_t *wolfie_status_sprite(uint8_t layer, uint8_t connected,
+                                                   uint8_t profile)
 {
-    switch (layer) {
-    case 0:
-        return connected ? &wolfie_status_on_qwerty_img : &wolfie_status_off_qwerty_img;
-    case 1:
-        return connected ? &wolfie_status_on_symbols_img : &wolfie_status_off_symbols_img;
-    case 2:
-        return connected ? &wolfie_status_on_function_img : &wolfie_status_off_function_img;
-    case 3:
-        return connected ? &wolfie_status_on_mouse_img : &wolfie_status_off_mouse_img;
-    case 4:
-        return connected ? &wolfie_status_on_gaming_img : &wolfie_status_off_gaming_img;
-    case 5:
-        return connected ? &cassini_status_on_hscroll_img : &cassini_status_off_hscroll_img;
-    default:
-        return connected ? &wolfie_status_on_layer_img : &wolfie_status_off_layer_img;
-    }
+    const uint8_t layer_index = layer < 6U ? layer : 6U;
+    const uint8_t profile_index = profile < 5U ? profile : 0U;
+    return cassini_status_profile_table[layer_index][connected ? 1U : 0U][profile_index];
 }
 
 static void wolfie_refresh_layer_status(bool force_bluetooth)
 {
     if (wolfie_layer_status == NULL) { return; }
 
-    /* Reuse the existing 250ms layer timer; no extra LVGL timer needed.
-     * These five slots are numbered BT1-BT5 for the person using Saturn.
-     * The saved ZMK BLE profile index itself is zero-based.
-     */
-    if (cassini_bt_profile_glyph != NULL) {
-        const uint8_t index = zmk_ble_active_profile_index();
-        if (index < 5U && index != cassini_last_bt_profile) {
-            lv_image_set_src(cassini_bt_profile_glyph, cassini_bt_profile_images[index]);
-            cassini_last_bt_profile = (int8_t)index;
-        }
-    }
-
     const uint8_t layer = zmk_keymap_highest_layer_active();
+    const uint8_t profile = zmk_ble_active_profile_index();
     if (force_bluetooth || (++wolfie_bt_ticks >= WOLFIE_BT_CHECK_EVERY_TICKS)) {
         wolfie_bt_ticks = 0U;
         wolfie_current_connected = zmk_ble_active_profile_is_connected() ? 1 : 0;
     }
-    if (layer != wolfie_last_layer || wolfie_current_connected != wolfie_last_connected) {
+    if (layer != wolfie_last_layer ||
+        wolfie_current_connected != wolfie_last_connected ||
+        profile != cassini_last_bt_profile) {
         lv_image_set_src(wolfie_layer_status,
-                         wolfie_status_sprite(layer, wolfie_current_connected));
+                         wolfie_status_sprite(layer, wolfie_current_connected, profile));
         wolfie_last_layer = layer;
         wolfie_last_connected = wolfie_current_connected;
+        cassini_last_bt_profile = (int8_t)profile;
     }
 }
 
@@ -261,7 +243,6 @@ static void wolfie_status_screen_event_cb(lv_event_t *event)
             wolfie_layer_timer = NULL;
         }
         wolfie_layer_status = NULL;
-        cassini_bt_profile_glyph = NULL;
         cassini_last_bt_profile = -1;
         animated_planet = NULL;
         usb_glyph = NULL;
@@ -325,15 +306,7 @@ lv_obj_t *zmk_display_status_screen(void)
     wolfie_current_connected = 0;
     wolfie_bt_ticks = 0U;
 
-    /* Top-right profile slot has its own 17x9 image, away from battery.
-     * It indicates the selected host regardless of pairing/connectivity.
-     */
-    /* Diagnostic only: do not allocate the extra BT-profile LVGL image.
-     * This isolates a possible display-object/resource interaction.
-     * The host Bluetooth name, selected profile, CPI, and orbit animation
-     * are deliberately left unchanged. BT slot badge is temporarily hidden.
-     */
-    cassini_bt_profile_glyph = NULL;
+    /* Selected BT profile is drawn in the existing layer/BT image. */
     cassini_last_bt_profile = -1;
 
     wolfie_refresh_layer_status(true);
