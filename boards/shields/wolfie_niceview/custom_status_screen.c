@@ -18,6 +18,7 @@
 #include <zmk/ble.h>
 #include <zmk/activity.h>
 #include "assets/wolfie_combined_status_glyphs.h"
+#include "assets/cassini_bt_profile_glyphs.h"
 #if IS_ENABLED(CONFIG_USB_DEVICE_STACK)
 #include <zmk/usb.h>
 #endif
@@ -67,6 +68,10 @@ static int8_t wolfie_last_layer = -1;
 static int8_t wolfie_last_connected = -1;
 static int8_t wolfie_current_connected = 0;
 static uint8_t wolfie_bt_ticks = 0U;
+
+/* Selected host slot (1-based display BT1..BT5), independent of LINK. */
+static lv_obj_t *cassini_bt_profile_glyph;
+static int8_t cassini_last_bt_profile = -1;
 
 /*
  * Restore profile-aware CPI without adding a new LVGL timer.
@@ -125,6 +130,19 @@ static const lv_image_dsc_t *wolfie_status_sprite(uint8_t layer, uint8_t connect
 static void wolfie_refresh_layer_status(bool force_bluetooth)
 {
     if (wolfie_layer_status == NULL) { return; }
+
+    /* Reuse the existing 250ms layer timer; no extra LVGL timer needed.
+     * These five slots are numbered BT1-BT5 for the person using Saturn.
+     * The saved ZMK BLE profile index itself is zero-based.
+     */
+    if (cassini_bt_profile_glyph != NULL) {
+        const uint8_t index = zmk_ble_active_profile_index();
+        if (index < 5U && index != cassini_last_bt_profile) {
+            lv_image_set_src(cassini_bt_profile_glyph, cassini_bt_profile_images[index]);
+            cassini_last_bt_profile = (int8_t)index;
+        }
+    }
+
     const uint8_t layer = zmk_keymap_highest_layer_active();
     if (force_bluetooth || (++wolfie_bt_ticks >= WOLFIE_BT_CHECK_EVERY_TICKS)) {
         wolfie_bt_ticks = 0U;
@@ -243,6 +261,8 @@ static void wolfie_status_screen_event_cb(lv_event_t *event)
             wolfie_layer_timer = NULL;
         }
         wolfie_layer_status = NULL;
+        cassini_bt_profile_glyph = NULL;
+        cassini_last_bt_profile = -1;
         animated_planet = NULL;
         usb_glyph = NULL;
         for (uint8_t i = 0; i < 4U; ++i) { battery_glyph[i] = NULL; }
@@ -304,6 +324,14 @@ lv_obj_t *zmk_display_status_screen(void)
     wolfie_last_connected = -1;
     wolfie_current_connected = 0;
     wolfie_bt_ticks = 0U;
+
+    /* Top-right profile slot has its own 17x9 image, away from battery.
+     * It indicates the selected host regardless of pairing/connectivity.
+     */
+    cassini_bt_profile_glyph = wolfie_make_glyph(
+        screen, cassini_bt_profile_images[0], CASSINI_BT_PROFILE_X, CASSINI_BT_PROFILE_Y);
+    cassini_last_bt_profile = -1;
+
     wolfie_refresh_layer_status(true);
     wolfie_layer_timer = lv_timer_create(wolfie_layer_timer_cb,
                                         WOLFIE_LAYER_REFRESH_MS, NULL);
